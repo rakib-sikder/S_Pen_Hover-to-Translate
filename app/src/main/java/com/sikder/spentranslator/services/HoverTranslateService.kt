@@ -1,12 +1,16 @@
-// File: app/src/main/java/com/sikder/spentranslator/services/HoverTranslateService.kt
-// Ensure your package name matches your project structure.
 package com.sikder.spentranslator.services
 
+import android.app.Activity
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -15,107 +19,124 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
-// ** STEP 1: Add ACTUAL S Pen SDK imports here based on Samsung's documentation **
-// For example (these are placeholders, find the real ones):
-// import com.samsung.android.sdk.pen.Spen // Replace with actual main Spen class
-// import com.samsung.android.sdk.pen.SpenSettingPen // If needed
-// import com.samsung.android.sdk.pen.SpenSettingHoverListener // Or similar for hover
+import androidx.core.app.NotificationCompat
+import com.sikder.spentranslator.MainActivity // To open app from notification
+import com.sikder.spentranslator.R // For notification icon (add a small icon to res/drawable or use mipmap/ic_launcher)
 
 class HoverTranslateService : Service() {
 
     private val TAG = "HoverTranslateService"
+    private val NOTIFICATION_CHANNEL_ID = "HoverTranslateServiceChannel"
+    private val NOTIFICATION_ID = 1337 // Unique ID for the notification
+
     private lateinit var windowManager: WindowManager
     private var overlayView: View? = null
-    private var overlayTextView: TextView? = null // To update text in the overlay
+    private var overlayTextView: TextView? = null
 
-    // ** STEP 2: Define variables for S Pen SDK instance and listeners **
-    // These are placeholders. Use actual types from the S Pen SDK.
-    // private var spenInstance: Spen? = null // Replace 'Spen' with the actual SDK class
-    // private var spenHoverHandler: YourActualSpenHoverHandler? = null // Replace with your handler/listener class
+    // TODO: S Pen SDK related variables and listeners will go here
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate: Service Created")
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        createNotificationChannel()
 
-        // ** STEP 3: Initialize S Pen SDK **
-        // This is where you MUST use the official S Pen SDK documentation.
-        // The goal is to initialize the SDK and prepare it for event listening.
-        Log.d(TAG, "Attempting to initialize S Pen SDK...")
-        try {
-            // --- REPLACE THIS CONCEPTUAL BLOCK WITH ACTUAL S PEN SDK CODE ---
-            // Example based on generic SDK ideas (consult Samsung's docs for real code):
-            // 1. Get an instance of the S Pen SDK's main object.
-            //    spenInstance = Spen.getInstance(applicationContext)
-            //
-            // 2. Check if S Pen features are supported on the device.
-            //    if (spenInstance != null && spenInstance.isFeatureEnabled(Spen.DEVICE_PEN)) {
-            //        Log.d(TAG, "S Pen SDK Initialized and Pen feature enabled.")
-            //
-            //        // 3. Create and register your S Pen hover listener.
-            //        //    This is the most CRITICAL part for global hover detection.
-            //        //    You need to find out from Samsung's docs how a SERVICE
-            //        //    can listen for hover events that occur over OTHER APPS.
-            //        setupSpenHoverListener() // Call a method you'll create
-            //
-            //    } else {
-            //        Log.w(TAG, "S Pen SDK not supported or Pen feature not enabled on this device.")
-            //        stopSelf() // Stop service if S Pen is essential and not available
-            //    }
-            // --- END OF S PEN SDK CONCEPTUAL BLOCK ---
-            Log.w(TAG, "S Pen SDK specific initialization needs to be implemented here based on official Samsung documentation.")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error initializing S Pen SDK: ${e.message}", e)
-            stopSelf() // Stop service if SDK initialization fails critically
-        }
+        // TODO: S Pen SDK Initialization will go here
+        Log.w(TAG, "S Pen SDK specific initialization needs to be implemented.")
     }
 
-    // ** STEP 4: Implement S Pen SDK Listener Setup and Callbacks **
-    // private fun setupSpenHoverListener() {
-    //     // Based on Samsung's S Pen SDK documentation:
-    //     // 1. Instantiate your S Pen hover listener implementation.
-    //     // spenHoverHandler = YourActualSpenHoverHandler { x, y, action ->
-    //     //     val logMessage = "S PEN SDK GLOBAL HOVER: action=$action, x=$x, y=$y"
-    //     //     Log.d(TAG, logMessage)
-    //     //     // Update overlay text for visual feedback
-    //     //     overlayTextView?.post { overlayTextView?.text = logMessage }
-    //     //
-    //     //     // LATER: Use x, y to position the overlay.
-    //     //     // LATER: Trigger text extraction at these coordinates.
-    //     // }
-    //
-    //     // 2. Register the listener with the S Pen SDK instance.
-    //     //    Pay close attention to any parameters or flags needed for
-    //     //    GLOBAL hover detection from a background service.
-    //     // spenInstance?.registerHoverListener(spenHoverHandler) // Example method name
-    //     Log.d(TAG, "S Pen hover listener registration attempted (CONCEPTUAL).")
-    // }
-
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "onStartCommand: Service Started")
+        Log.d(TAG, "onStartCommand: Service Started. Action: ${intent?.action}")
 
+        // --- Start as a Foreground Service ---
+        val notificationIntent = Intent(this, MainActivity::class.java)
+        val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, pendingIntentFlags)
+
+        val notification: Notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("SPen Translator Active")
+            .setContentText("Hover service is running.")
+            // IMPORTANT: Replace R.mipmap.ic_launcher with a proper small notification icon (e.g., in res/drawable)
+            // For example, create a simple ic_notification.xml in res/drawable
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true) // Makes the notification non-dismissable by swipe
+            .build()
+
+        // Service type for media projection is required on Android Q (API 29) and above
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+        Log.d(TAG, "Service started in foreground.")
+        // --- End Foreground Service Setup ---
+
+        // Show overlay if permission is granted
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Log.e(TAG, "Overlay permission is not granted. Cannot show overlay.")
-            // Consider stopping or notifying user, as overlay is key.
         } else {
             if (overlayView == null) {
                 showOverlay()
             }
         }
-        // Ensure S Pen listening is active if it's not started in onCreate or needs re-activation.
+
+        // Check if this intent is for starting MediaProjection
+        if (intent?.action == ACTION_START_MEDIA_PROJECTION) {
+            val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
+            val data: Intent? = intent.getParcelableExtra(EXTRA_DATA_INTENT)
+
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                Log.d(TAG, "MediaProjection data received by service. Ready to start capture.")
+                // TODO: Get MediaProjectionManager instance
+                // val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                // TODO: Get MediaProjection object:
+                // val mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
+                // TODO: Use this mediaProjection object to start screen capture (e.g., with ImageReader and VirtualDisplay)
+                // For now, we just log. The next step would be to implement startScreenCapture(mediaProjection)
+                overlayTextView?.post { overlayTextView?.text = "Screen Capture Ready!"}
+
+            } else {
+                Log.e(TAG, "MediaProjection data is invalid or permission denied. ResultCode: $resultCode")
+                overlayTextView?.post { overlayTextView?.text = "Screen Capture Failed!"}
+                // stopSelf() // Optionally stop service if screen capture is essential and failed
+            }
+        }
+
+        // TODO: Start S Pen hover detection logic using S Pen SDK.
+
         return START_STICKY
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val serviceChannel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Hover Translate Service Channel",
+                NotificationManager.IMPORTANCE_LOW // Use LOW to avoid sound/vibration by default
+            ).apply {
+                description = "Channel for SPen Translator foreground service"
+            }
+            val manager = getSystemService(NotificationManager::class.java)
+            manager?.createNotificationChannel(serviceChannel)
+            Log.d(TAG, "Notification channel created.")
+        }
     }
 
     private fun showOverlay() {
         overlayTextView = TextView(this).apply {
-            text = "S Pen Service Active. Hover to test..."
+            text = "S Pen Service Active..." // Initial text
             setBackgroundColor(Color.argb(200, 30, 30, 30))
             setTextColor(Color.WHITE)
             val paddingInDp = 8; val scale = resources.displayMetrics.density
             val paddingInPx = (paddingInDp * scale + 0.5f).toInt()
             setPadding(paddingInPx, paddingInPx, paddingInPx, paddingInPx)
+            Log.d(TAG, "Overlay TextView created.")
         }
         overlayView = overlayTextView
 
@@ -132,9 +153,11 @@ class HoverTranslateService : Service() {
         }
 
         try {
-            if (overlayView?.windowToken == null) {
+            if (overlayView?.windowToken == null && overlayView?.parent == null) {
                 windowManager.addView(overlayView, params)
                 Log.d(TAG, "Overlay view added successfully.")
+            } else {
+                Log.d(TAG, "Overlay view might already be attached or has a window token.")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error adding overlay view: ${e.message}", e)
@@ -144,27 +167,36 @@ class HoverTranslateService : Service() {
 
     private fun removeOverlay() {
         overlayView?.let {
-            try { windowManager.removeView(it) } catch (e: Exception) { Log.e(TAG, "Error removing overlay: ${e.message}") }
+            try {
+                if (it.parent != null) { // Check if view is still attached
+                    windowManager.removeView(it)
+                    Log.d(TAG, "Overlay view removed successfully.")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removing overlay view: ${e.message}", e)
+            }
         }
-        overlayView = null; overlayTextView = null
+        overlayView = null
+        overlayTextView = null
     }
 
     override fun onBind(intent: Intent?): IBinder? {
-        return null // Not using binding
+        Log.d(TAG, "onBind called, returning null.")
+        return null
     }
 
     override fun onDestroy() {
         super.onDestroy()
         removeOverlay()
-        // ** STEP 5: Unregister S Pen Listeners and Release SDK Resources **
-        // This is where you MUST use the official S Pen SDK documentation.
-        Log.d(TAG, "Attempting to unregister S Pen listeners and release SDK resources (CONCEPTUAL).")
-        // try {
-        //     // spenInstance?.unregisterHoverListener(spenHoverHandler) // Example
-        //     // spenInstance?.close() // Or other cleanup methods
-        // } catch (e: Exception) {
-        //     Log.e(TAG, "Error cleaning up S Pen SDK: ${e.message}", e)
-        // }
+        stopForeground(STOP_FOREGROUND_REMOVE) // Use this to remove notification correctly
         Log.d(TAG, "onDestroy: Service Stopped and Destroyed")
+        // TODO: S Pen SDK Cleanup (unregister listeners, release resources)
+        Log.w(TAG, "S Pen SDK specific cleanup needs to be implemented.")
+    }
+
+    companion object {
+        const val ACTION_START_MEDIA_PROJECTION = "com.sikder.spentranslator.ACTION_START_MEDIA_PROJECTION"
+        const val EXTRA_RESULT_CODE = "com.sikder.spentranslator.RESULT_CODE"
+        const val EXTRA_DATA_INTENT = "com.sikder.spentranslator.DATA_INTENT"
     }
 }

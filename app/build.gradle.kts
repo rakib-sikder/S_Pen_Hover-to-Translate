@@ -40,6 +40,11 @@ android {
 }
 
 dependencies {
+    implementation("androidx.core:core-ktx:1.13.1") // Or latest
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2") // Or latest
+    implementation("androidx.activity:activity-compose:1.9.0") // <<-- ADD OR UPDATE THIS LINE (check for latest version)
+    implementation(platform("androidx.compose:compose-bom:2024.05.00")) // Or your Compose BOM version
+    implementation("androidx.compose.ui:ui")
     implementation("com.squareup.okhttp3:okhttp:4.12.0") // Check for the latest version of OkHttp
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))

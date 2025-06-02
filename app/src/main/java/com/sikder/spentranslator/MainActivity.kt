@@ -1,8 +1,15 @@
 package com.sikder.spentranslator
 
+
+import androidx.activity.compose.rememberLauncherForActivityResult // <<-- THIS IS THE CORRECT IMPORT
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -26,7 +33,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
+import androidx.compose.material3.TextField // For ExposedDropdownMenuBox
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,8 +51,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.sikder.spentranslator.network.TranslationApiClient // Ensure this path is correct
-import com.sikder.spentranslator.services.HoverTranslateService // Import your service
+import com.sikder.spentranslator.network.TranslationApiClient
+import com.sikder.spentranslator.services.HoverTranslateService // Ensure this path is correct
 import com.sikder.spentranslator.ui.theme.SPenTranslatorTheme
 import kotlinx.coroutines.launch
 
@@ -61,17 +68,18 @@ val supportedLanguages = listOf(
     "Japanese" to "ja",
     "Russian" to "ru",
     "Portuguese" to "pt"
+    // Add more as needed
 )
 
 class MainActivity : ComponentActivity() {
-    private val TAG = "SPenComposeDebug"
+    private val TAG = "SPenMainActivity" // Changed tag slightly for clarity
     private val apiClient = TranslationApiClient()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            // sPenLogMessage state is kept for Logcat debugging, but not passed to UI for display
+            // State for S Pen log message (kept for Logcat debugging)
             var sPenLogMessage by remember { mutableStateOf("S Pen activity...") }
             var translatedText by remember { mutableStateOf("Translation will appear here.") }
             var isLoadingTranslation by remember { mutableStateOf(false) }
@@ -82,6 +90,22 @@ class MainActivity : ComponentActivity() {
 
             val coroutineScope = rememberCoroutineScope()
             val context = LocalContext.current
+
+            // Launcher for the Overlay Permission settings screen
+            val overlayPermissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.StartActivityForResult()
+            ) { _ -> // The '_' means we are not using the direct result data from the activity
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    // After returning from settings, we re-check the permission status
+                    if (Settings.canDrawOverlays(context)) {
+                        Toast.makeText(context, "Overlay permission granted!", Toast.LENGTH_SHORT).show()
+                        // Current code shows a Toast, but DOES NOT automatically start the service.
+                        // You would have to click the "Start Hover Service" button again.
+                    } else {
+                        Toast.makeText(context, "Overlay permission was not granted.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
 
             SPenTranslatorTheme {
                 Box(
@@ -104,7 +128,7 @@ class MainActivity : ComponentActivity() {
                                             PointerEventType.Exit -> "S Pen EXIT: x=$x, y=$y"
                                             else -> sPenLogMessage // Keep updating for Logcat
                                         }
-                                        sPenLogMessage = newLog // Update state for Logcat if needed
+                                        sPenLogMessage = newLog
                                         Log.d(TAG, newLog) // Log S Pen movement
 
                                         if (eventType == PointerEventType.Exit &&
@@ -127,7 +151,6 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                         ScreenContent(
-                            // logMessage parameter is removed from the call
                             textToTranslate = textToTranslateInput,
                             onTextToTranslateChange = { newText -> textToTranslateInput = newText },
                             translation = translatedText,
@@ -139,14 +162,25 @@ class MainActivity : ComponentActivity() {
                             availableLanguages = supportedLanguages,
                             onStartServiceClick = {
                                 Log.d(TAG, "Start Service button clicked")
-                                Intent(context, HoverTranslateService::class.java).also { intent ->
-                                    context.startService(intent)
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+                                    Toast.makeText(context, "Overlay permission required. Opening settings...", Toast.LENGTH_LONG).show()
+                                    val intent = Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                    overlayPermissionLauncher.launch(intent)
+                                } else {
+                                    Toast.makeText(context, "Starting Hover Service...", Toast.LENGTH_SHORT).show()
+                                    Intent(context, HoverTranslateService::class.java).also { intentValue ->
+                                        context.startService(intentValue)
+                                    }
                                 }
                             },
                             onStopServiceClick = {
                                 Log.d(TAG, "Stop Service button clicked")
-                                Intent(context, HoverTranslateService::class.java).also { intent ->
-                                    context.stopService(intent)
+                                Toast.makeText(context, "Stopping Hover Service...", Toast.LENGTH_SHORT).show()
+                                Intent(context, HoverTranslateService::class.java).also { intentValue ->
+                                    context.stopService(intentValue)
                                 }
                             },
                             modifier = Modifier.padding(innerPadding)
@@ -162,7 +196,6 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScreenContent(
-    // logMessage parameter removed
     textToTranslate: String,
     onTextToTranslateChange: (String) -> Unit,
     translation: String,
@@ -183,10 +216,11 @@ fun ScreenContent(
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Removed S Pen Debug Info Text Composables
+        // S Pen Log display on screen was removed as per your request
+        // You can add it back if needed for debugging on screen:
         // Text(text = "S Pen Debug Info:", modifier = Modifier.padding(bottom = 8.dp))
         // Text(
-        // text = logMessage,
+        // text = sPenLogMessage, // (You would need to pass sPenLogMessage to ScreenContent again)
         // modifier = Modifier.padding(bottom = 16.dp)
         // )
 
@@ -331,7 +365,6 @@ fun LanguageSelector(
 fun DefaultPreview() {
     SPenTranslatorTheme {
         ScreenContent(
-            // logMessage parameter removed from preview call
             textToTranslate = "Hello there",
             onTextToTranslateChange = {},
             translation = "ওহে আচ্ছা",

@@ -1,35 +1,38 @@
 package com.sikder.spentranslator
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row // For arranging language selectors
-import androidx.compose.foundation.layout.Spacer // For spacing
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height // For spacing
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width // For spacing
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api // Required for ExposedDropdownMenuBox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.OutlinedTextField // For the main text input
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField // For ExposedDropdownMenuBox
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,13 +41,15 @@ import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.sikder.spentranslator.network.TranslationApiClient // Ensure this path is correct
+import com.sikder.spentranslator.services.HoverTranslateService // Import your service
 import com.sikder.spentranslator.ui.theme.SPenTranslatorTheme
 import kotlinx.coroutines.launch
 
-// Define language list outside for reusability if needed, or inside Composable with remember
+// Define language list (can be moved to a constants file or ViewModel later)
 val supportedLanguages = listOf(
     "English" to "en",
     "Bengali" to "bn",
@@ -56,7 +61,6 @@ val supportedLanguages = listOf(
     "Japanese" to "ja",
     "Russian" to "ru",
     "Portuguese" to "pt"
-    // Add more as needed
 )
 
 class MainActivity : ComponentActivity() {
@@ -67,16 +71,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            var sPenLogMessage by remember { mutableStateOf("Hover S Pen to see coordinates...") }
+            // sPenLogMessage state is kept for Logcat debugging, but not passed to UI for display
+            var sPenLogMessage by remember { mutableStateOf("S Pen activity...") }
             var translatedText by remember { mutableStateOf("Translation will appear here.") }
             var isLoadingTranslation by remember { mutableStateOf(false) }
             var textToTranslateInput by remember { mutableStateOf("") }
 
-            // State for selected languages
-            var sourceLanguageCode by remember { mutableStateOf("en") } // Default source: English
-            var targetLanguageCode by remember { mutableStateOf("bn") } // Default target: Bangla
+            var sourceLanguageCode by remember { mutableStateOf("en") }
+            var targetLanguageCode by remember { mutableStateOf("bn") }
 
             val coroutineScope = rememberCoroutineScope()
+            val context = LocalContext.current
 
             SPenTranslatorTheme {
                 Box(
@@ -97,10 +102,10 @@ class MainActivity : ComponentActivity() {
                                             PointerEventType.Enter -> "S Pen ENTER: x=$x, y=$y"
                                             PointerEventType.Move -> "S Pen MOVE: x=$x, y=$y"
                                             PointerEventType.Exit -> "S Pen EXIT: x=$x, y=$y"
-                                            else -> sPenLogMessage
+                                            else -> sPenLogMessage // Keep updating for Logcat
                                         }
-                                        sPenLogMessage = newLog
-                                        Log.d(TAG, newLog)
+                                        sPenLogMessage = newLog // Update state for Logcat if needed
+                                        Log.d(TAG, newLog) // Log S Pen movement
 
                                         if (eventType == PointerEventType.Exit &&
                                             !isLoadingTranslation &&
@@ -122,7 +127,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                         ScreenContent(
-                            logMessage = sPenLogMessage,
+                            // logMessage parameter is removed from the call
                             textToTranslate = textToTranslateInput,
                             onTextToTranslateChange = { newText -> textToTranslateInput = newText },
                             translation = translatedText,
@@ -132,6 +137,18 @@ class MainActivity : ComponentActivity() {
                             targetLangCode = targetLanguageCode,
                             onTargetLangChange = { newLangCode -> targetLanguageCode = newLangCode },
                             availableLanguages = supportedLanguages,
+                            onStartServiceClick = {
+                                Log.d(TAG, "Start Service button clicked")
+                                Intent(context, HoverTranslateService::class.java).also { intent ->
+                                    context.startService(intent)
+                                }
+                            },
+                            onStopServiceClick = {
+                                Log.d(TAG, "Stop Service button clicked")
+                                Intent(context, HoverTranslateService::class.java).also { intent ->
+                                    context.stopService(intent)
+                                }
+                            },
                             modifier = Modifier.padding(innerPadding)
                         )
                     }
@@ -142,10 +159,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class) // Required for ExposedDropdownMenuBox
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScreenContent(
-    logMessage: String,
+    // logMessage parameter removed
     textToTranslate: String,
     onTextToTranslateChange: (String) -> Unit,
     translation: String,
@@ -154,7 +171,9 @@ fun ScreenContent(
     onSourceLangChange: (String) -> Unit,
     targetLangCode: String,
     onTargetLangChange: (String) -> Unit,
-    availableLanguages: List<Pair<String, String>>, // List of (Display Name, Code)
+    availableLanguages: List<Pair<String, String>>,
+    onStartServiceClick: () -> Unit,
+    onStopServiceClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -164,13 +183,13 @@ fun ScreenContent(
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "S Pen Debug Info:", modifier = Modifier.padding(bottom = 8.dp))
-        Text(
-            text = logMessage,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        // Removed S Pen Debug Info Text Composables
+        // Text(text = "S Pen Debug Info:", modifier = Modifier.padding(bottom = 8.dp))
+        // Text(
+        // text = logMessage,
+        // modifier = Modifier.padding(bottom = 16.dp)
+        // )
 
-        // Language Selectors
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -227,10 +246,30 @@ fun ScreenContent(
                 modifier = Modifier.padding(top = 8.dp)
             )
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            Button(
+                onClick = onStartServiceClick,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+            ) {
+                Text("Start Hover Service")
+            }
+            Button(
+                onClick = onStopServiceClick,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336))
+            ) {
+                Text("Stop Hover Service")
+            }
+        }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class) // Required for ExposedDropdownMenuBox
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LanguageSelector(
     label: String,
@@ -242,20 +281,19 @@ fun LanguageSelector(
     var expanded by remember { mutableStateOf(false) }
     val selectedLanguageDisplayName = availableLanguages.find { it.second == selectedLangCode }?.first ?: selectedLangCode
 
-    Column(modifier = modifier) { // Wrap in Column to place label above
+    Column(modifier = modifier) {
         Text(text = label, color = Color.Gray, modifier = Modifier.padding(bottom = 4.dp))
         ExposedDropdownMenuBox(
             expanded = expanded,
             onExpandedChange = { expanded = !expanded },
         ) {
-            TextField( // Use androidx.compose.material3.TextField
+            TextField(
                 modifier = Modifier
-                    .menuAnchor() // Important for ExposedDropdownMenuBox
+                    .menuAnchor()
                     .fillMaxWidth(),
                 readOnly = true,
                 value = selectedLanguageDisplayName,
                 onValueChange = {},
-                // label = { Text(label) }, // Label is now above
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 colors = TextFieldDefaults.colors(
                     focusedTextColor = Color.White,
@@ -275,9 +313,9 @@ fun LanguageSelector(
             ) {
                 availableLanguages.forEach { selectionOption ->
                     DropdownMenuItem(
-                        text = { Text(selectionOption.first) }, // Display name
+                        text = { Text(selectionOption.first) },
                         onClick = {
-                            onLanguageChange(selectionOption.second) // Update state with language code
+                            onLanguageChange(selectionOption.second)
                             expanded = false
                         },
                         contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
@@ -288,13 +326,12 @@ fun LanguageSelector(
     }
 }
 
-
 @Preview(showBackground = true, backgroundColor = 0xFF1C1C1E)
 @Composable
 fun DefaultPreview() {
     SPenTranslatorTheme {
         ScreenContent(
-            logMessage = "S Pen Hover: x=100.00, y=200.00",
+            // logMessage parameter removed from preview call
             textToTranslate = "Hello there",
             onTextToTranslateChange = {},
             translation = "ওহে আচ্ছা",
@@ -303,7 +340,9 @@ fun DefaultPreview() {
             onSourceLangChange = {},
             targetLangCode = "bn",
             onTargetLangChange = {},
-            availableLanguages = supportedLanguages
+            availableLanguages = supportedLanguages,
+            onStartServiceClick = {},
+            onStopServiceClick = {}
         )
     }
 }

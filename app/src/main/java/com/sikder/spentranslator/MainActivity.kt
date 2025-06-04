@@ -15,12 +15,14 @@ import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
 import android.widget.Button
+import android.widget.EditText // Import EditText
+import android.widget.TextView // Import TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.localbroadcastmanager.content.LocalBroadcastManager // Optional for local broadcasts
+// import androidx.localbroadcastmanager.content.LocalBroadcastManager // Keep if you switched to this
 import com.sikder.spentranslator.services.MyTextSelectionService
 
 class MainActivity : AppCompatActivity() {
@@ -29,6 +31,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnEnableAccessibility: Button
     private lateinit var btnEnableOverlay: Button
     private lateinit var btnToggleSelectToTranslate: Button
+
+    // New UI elements
+    private lateinit var etSourceText: EditText
+    private lateinit var btnTranslateInApp: Button
+    private lateinit var tvTargetText: TextView
 
     private val NOTIFICATION_PERMISSION_REQ_CODE = 123
 
@@ -48,7 +55,7 @@ class MainActivity : AppCompatActivity() {
     private val overlayPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                updateButtonStates() // Update button text after returning
+                updateButtonStates()
             }
         }
 
@@ -56,10 +63,38 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // Initialize existing buttons
         btnEnableAccessibility = findViewById(R.id.btnEnableAccessibility)
         btnEnableOverlay = findViewById(R.id.btnEnableOverlay)
         btnToggleSelectToTranslate = findViewById(R.id.btnToggleSelectToTranslate)
 
+        // Initialize new UI elements for in-app translation
+        etSourceText = findViewById(R.id.etSourceText)
+        btnTranslateInApp = findViewById(R.id.btnTranslateInApp)
+        tvTargetText = findViewById(R.id.tvTargetText)
+
+        // Set click listener for the new Translate button
+        btnTranslateInApp.setOnClickListener {
+            val sourceText = etSourceText.text.toString()
+            if (sourceText.isNotBlank()) {
+                // For now, we'll use hardcoded languages. You can add UI for language selection later.
+                val sourceLang = "en" // Example source language
+                val targetLang = "bn" // Example target language
+
+                TranslationApiClient.translate(sourceText, sourceLang, targetLang) { translatedText ->
+                    if (translatedText != null) {
+                        tvTargetText.text = translatedText
+                    } else {
+                        tvTargetText.text = "Translation failed"
+                        Toast.makeText(this, "Translation error", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } else {
+                Toast.makeText(this, "Please enter text to translate", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Existing button listeners
         btnEnableAccessibility.setOnClickListener {
             if (!isAccessibilityServiceSystemEnabled(this)) {
                 val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
@@ -94,59 +129,43 @@ class MainActivity : AppCompatActivity() {
             val serviceIntent = Intent(this, MyTextSelectionService::class.java)
             if (MyTextSelectionService.isFeatureActive) {
                 serviceIntent.action = MyTextSelectionService.ACTION_STOP_FEATURE
-                MyTextSelectionService.isFeatureActive = false // Optimistically update
+                MyTextSelectionService.isFeatureActive = false
                 Log.d(TAG, "Sending STOP_FEATURE command to service.")
             } else {
                 serviceIntent.action = MyTextSelectionService.ACTION_START_FEATURE
-                MyTextSelectionService.isFeatureActive = true // Optimistically update
+                MyTextSelectionService.isFeatureActive = true
                 Log.d(TAG, "Sending START_FEATURE command to service.")
+                // Minimize app after starting the feature
+                val minimizeIntent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(minimizeIntent)
             }
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && serviceIntent.action == MyTextSelectionService.ACTION_START_FEATURE) {
-                    startForegroundService(serviceIntent) // Required for starting foreground service from background on O+
+                    startForegroundService(serviceIntent)
                 } else {
                     startService(serviceIntent)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error starting/stopping MyTextSelectionService", e)
-                MyTextSelectionService.isFeatureActive = !MyTextSelectionService.isFeatureActive // Revert optimistic update
+                MyTextSelectionService.isFeatureActive = !MyTextSelectionService.isFeatureActive // Revert
             }
-            updateButtonStates() // Update UI immediately
+            updateButtonStates()
         }
-        requestNotificationPermission() // For foreground service notification
-        // In onCreate() of MainActivity.kt
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // TIRAMISU is API 33 where these flags are more strictly enforced for Context.registerReceiver
-            registerReceiver(uiUpdateReceiver, IntentFilter(ACTION_UPDATE_UI), Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            // For older versions, the flag might not be available in this specific registerReceiver overload,
-            // or the behavior was less strict. However, it's good practice.
-            // If targeting below API 33 with this receiver, and it's not meant to be exported,
-            // often it was handled by manifest declaration if it was a manifest-declared receiver,
-            // or LocalBroadcastManager was used for purely internal broadcasts.
-            // For a context-registered receiver listening to custom intents, and if your minSdk is lower,
-            // this flag might not be needed or available for the older registerReceiver method.
-            // However, since your compileSdk and targetSdk are high, it's best to include it with a version check.
-            // A simpler way for a local receiver without worrying about export flags is LocalBroadcastManager.
-            // BUT, to fix the immediate crash for API 31+ targets:
-            registerReceiver(uiUpdateReceiver, IntentFilter(ACTION_UPDATE_UI), RECEIVER_NOT_EXPORTED) // For API 33+, this overload exists.
-            // For API 31, 32, if using targetSdk 31+, this rule still applies.
-            // Let's assume Context.RECEIVER_NOT_EXPORTED is what's needed.
-            // The error implies this flag should be specifiable.
-        }
+        requestNotificationPermission()
+        // Using application context for receiver for wider lifecycle, or use registerReceiver with appropriate flags
+        // For UI updates tied to activity lifecycle, a simpler register/unregister in onStart/onStop or onResume/onPause
+        // with this as the context is also common.
+        // Let's stick to the previous registration in onCreate for now.
+        registerReceiver(uiUpdateReceiver, IntentFilter(ACTION_UPDATE_UI), Context.RECEIVER_NOT_EXPORTED)
     }
 
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "onResume called, updating button states.")
-        // Check actual service running state for more accuracy if possible
-        // For simplicity, we rely on the static flag and broadcasts for now
         updateButtonStates()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        // Consider if unregistering receiver is needed, depends on lifecycle.
-        // For this app, keeping it registered while activity is alive is fine.
     }
 
     override fun onDestroy() {
@@ -154,12 +173,11 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(uiUpdateReceiver)
     }
 
-
     private fun updateButtonStates() {
         // System Accessibility Service Permission
         if (isAccessibilityServiceSystemEnabled(this)) {
             btnEnableAccessibility.text = getString(R.string.accessibility_service_enabled_text)
-            btnEnableAccessibility.isEnabled = false // Disable if already enabled in system
+            btnEnableAccessibility.isEnabled = false
         } else {
             btnEnableAccessibility.text = getString(R.string.enable_accessibility_service)
             btnEnableAccessibility.isEnabled = true
@@ -169,14 +187,14 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (Settings.canDrawOverlays(this)) {
                 btnEnableOverlay.text = getString(R.string.overlay_permission_granted_text)
-                btnEnableOverlay.isEnabled = false // Disable if already granted
+                btnEnableOverlay.isEnabled = false
             } else {
                 btnEnableOverlay.text = getString(R.string.enable_overlay_permission)
                 btnEnableOverlay.isEnabled = true
             }
         } else {
             btnEnableOverlay.text = getString(R.string.overlay_permission_not_required_text)
-            btnEnableOverlay.isEnabled = false // Not applicable, so disable
+            btnEnableOverlay.isEnabled = false
         }
 
         // Toggle Select-to-Translate Feature Button
@@ -185,7 +203,7 @@ class MainActivity : AppCompatActivity() {
             btnToggleSelectToTranslate.isEnabled = false
         } else {
             btnToggleSelectToTranslate.isEnabled = true
-            if (MyTextSelectionService.isFeatureActive) { // Check our static flag
+            if (MyTextSelectionService.isFeatureActive) {
                 btnToggleSelectToTranslate.text = getString(R.string.stop_select_to_translate)
             } else {
                 btnToggleSelectToTranslate.text = getString(R.string.start_select_to_translate)
@@ -196,6 +214,9 @@ class MainActivity : AppCompatActivity() {
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.POST_NOTIFICATIONS)) {
+                    Toast.makeText(this, "Notification permission is needed to show service status.", Toast.LENGTH_LONG).show()
+                }
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQ_CODE)
             }
         }
@@ -220,7 +241,8 @@ class MainActivity : AppCompatActivity() {
         colonSplitter.setString(enabledServicesSetting)
         while (colonSplitter.hasNext()) {
             val componentNameString = colonSplitter.next()
-            if (componentNameString.equals(serviceComponent.flattenToString(), ignoreCase = true)) {
+            if (componentNameString.equals(serviceComponent.flattenToString(), ignoreCase = true) ||
+                componentNameString.equals(serviceComponent.toShortString(), ignoreCase = true)) { // Added toShortString check for robustness
                 return true
             }
         }

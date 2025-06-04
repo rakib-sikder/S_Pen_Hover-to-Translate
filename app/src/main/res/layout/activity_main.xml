@@ -4,30 +4,79 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:gravity="center"
         android:padding="16dp"
         tools:context=".MainActivity">
 
     <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="SpentTranslator Setup"
+            android:text="@string/in_app_translator_title"
             android:textSize="20sp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp"/>
+
+    <EditText
+            android:id="@+id/etSourceText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/source_text_hint"
+            android:inputType="textMultiLine"
+            android:minLines="3"
+            android:gravity="top"
+            android:layout_marginBottom="8dp"/>
+
+    <Button
+            android:id="@+id/btnTranslateInApp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:text="@string/translate_button_text"
+            android:layout_marginBottom="16dp"/>
+
+    <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/translated_text_label"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp"/>
+
+    <TextView
+            android:id="@+id/tvTargetText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/target_text_hint"
+            android:minLines="3"
+            android:background="#EEEEEE"
+            android:padding="8dp"
             android:layout_marginBottom="24dp"/>
+
+    <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?android:attr/listDivider"
+            android:layout_marginBottom="24dp"/>
+
+    <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SpentTranslator Setup"
+            android:textSize="18sp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp"/>
 
     <Button
             android:id="@+id/btnEnableOverlay"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/enable_overlay_permission"
-            android:layout_marginBottom="16dp"/>
+            android:layout_marginBottom="8dp"/>
 
     <Button
             android:id="@+id/btnEnableAccessibility"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/enable_accessibility_service"
-            android:layout_marginBottom="24dp"/>
+            android:layout_marginBottom="16dp"/>
 
     <Button
             android:id="@+id/btnToggleSelectToTranslate"

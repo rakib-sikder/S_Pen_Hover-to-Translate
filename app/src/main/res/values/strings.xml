@@ -9,8 +9,14 @@
     <string name="enable_overlay_permission">Enable Overlay Permission</string>
     <string name="overlay_permission_granted_text">Overlay Permission (Granted)</string>
     <string name="overlay_permission_not_required_text">Overlay Permission (Not Required)</string>
-
+    <string name="in_app_translator_title">In-App Translator</string>
+    <string name="source_text_hint">Enter text to translate</string>
+    <string name="translate_button_text">Translate</string>
+    <string name="translated_text_label">Translation:</string>
+    <string name="target_text_hint">Translated text will appear here</string>
     <!-- New Strings -->
+    <string name="instruction_please_select">Please select text to translate</string>
+    <string name="feedback_you_selected">You selected: %s</string>
     <string name="start_select_to_translate">Start Select-to-Translate</string>
     <string name="stop_select_to_translate">Stop Select-to-Translate (Active)</string>
     <string name="select_to_translate_permissions_needed">Enable System Permissions First</string>

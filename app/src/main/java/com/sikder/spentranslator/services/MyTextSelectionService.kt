@@ -1,5 +1,6 @@
 package com.sikder.spentranslator.services
 
+// ... other imports remain the same ...
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Notification
@@ -17,6 +18,7 @@ import com.sikder.spentranslator.MainActivity
 import com.sikder.spentranslator.R
 import com.sikder.spentranslator.TranslationApiClient
 
+
 class MyTextSelectionService : AccessibilityService() {
 
     private val TAG = "TextSelectionService"
@@ -30,8 +32,7 @@ class MyTextSelectionService : AccessibilityService() {
     companion object {
         const val ACTION_START_FEATURE = "com.sikder.spentranslator.ACTION_START_FEATURE"
         const val ACTION_STOP_FEATURE = "com.sikder.spentranslator.ACTION_STOP_FEATURE"
-        var isFeatureActive = false // Static flag to indicate active state
-        // Note: For more robustness across process death, use SharedPreferences
+        var isFeatureActive = false
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -42,21 +43,42 @@ class MyTextSelectionService : AccessibilityService() {
                     isFeatureActive = true
                     startForegroundServiceNotification()
                     Log.i(TAG, "Select-to-Translate feature ACTIVATED.")
+                    // Show initial instruction
+                    Log.d(TAG, "Attempting to show initial instruction tooltip...") // <<<< ADD/VERIFY THIS LOG
+                    val instructionIntent = Intent(this, InstructionTooltipService::class.java).apply {
+                        action = InstructionTooltipService.ACTION_SHOW_INSTRUCTION
+                    }
+                    startService(instructionIntent)
+                }
+                if (!isFeatureActive) {
+                    isFeatureActive = true
+                    startForegroundServiceNotification()
+                    Log.i(TAG, "Select-to-Translate feature ACTIVATED.")
+                    // Show initial instruction
+                    val instructionIntent = Intent(this, InstructionTooltipService::class.java).apply {
+                        action = InstructionTooltipService.ACTION_SHOW_INSTRUCTION
+                    }
+                    startService(instructionIntent)
                 }
             }
+
             ACTION_STOP_FEATURE -> {
                 if (isFeatureActive) {
                     isFeatureActive = false
                     stopForeground(true)
                     Log.i(TAG, "Select-to-Translate feature DEACTIVATED.")
-                    // Consider if stopSelf() is needed or if service should remain for next start
+                    // Hide instruction
+                    val instructionIntent = Intent(this, InstructionTooltipService::class.java).apply {
+                        action = InstructionTooltipService.ACTION_HIDE
+                    }
+                    startService(instructionIntent)
                 }
             }
         }
-        return START_STICKY // Or START_NOT_STICKY depending on desired restart behavior
+        return START_STICKY
     }
 
-
+    // ... startForegroundServiceNotification() and createNotificationChannel() methods remain the same ...
     private fun startForegroundServiceNotification() {
         createNotificationChannel()
         val notificationIntent = Intent(this, MainActivity::class.java)
@@ -96,18 +118,18 @@ class MyTextSelectionService : AccessibilityService() {
         }
     }
 
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (!isFeatureActive) { // Only process if feature is explicitly started
-            // Log.v(TAG, "Feature not active, ignoring event: ${event?.eventType}")
+        if (!isFeatureActive) {
             return
         }
-
         Log.d(TAG, "onAccessibilityEvent (active): eventType=${event?.eventType}, pkg=${event?.packageName}")
         if (event == null) return
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED -> {
                 Log.i(TAG, ">>> TYPE_VIEW_TEXT_SELECTION_CHANGED event detected (active) <<<")
+                // ... (debounce logic remains the same) ...
                 val currentTime = System.currentTimeMillis()
                 if (currentTime - lastProcessedTime < DEBOUNCE_THRESHOLD) {
                     Log.d(TAG, "Debounced event, returning.")
@@ -120,45 +142,54 @@ class MyTextSelectionService : AccessibilityService() {
                     Log.w(TAG, "Source node is null, returning.")
                     return
                 }
-                Log.d(TAG, "Source node className: ${sourceNode.className}")
-
+                // ... (existing sourceNode.let block, slightly modified) ...
                 sourceNode.let { node ->
                     var selectedText: CharSequence? = null
-                    Log.d(TAG, "Attempting to extract selected text...")
-                    Log.d(TAG, "Node text: \"${node.text}\", SelStart: ${node.textSelectionStart}, SelEnd: ${node.textSelectionEnd}")
-
+                    // ... (existing text extraction logic using textSelectionStart/End) ...
                     if (node.textSelectionStart != -1 && node.textSelectionEnd != -1 &&
                         node.textSelectionStart < node.textSelectionEnd && node.text != null &&
                         node.textSelectionEnd <= node.text.length) {
                         selectedText = node.text?.subSequence(node.textSelectionStart, node.textSelectionEnd)
-                        if (!selectedText.isNullOrEmpty()) {
-                            Log.i(TAG, "Extracted selected text: \"$selectedText\"")
-                        } else {
-                            Log.w(TAG, "Subsequence from selection indices was null or empty.")
-                        }
-                    } else {
-                        Log.w(TAG, "Conditions for selection indices not met.")
                     }
 
                     if (!selectedText.isNullOrEmpty() && selectedText.toString().isNotBlank()) {
                         if (selectedText != lastSelectedText) {
-                            lastSelectedText = selectedText
-                            Log.i(TAG, "Processing NEW selected text: \"$selectedText\"")
+                            lastSelectedText = selectedText // Update lastSelectedText here
+
+                            Log.i(TAG, "Captured selected text: \"$selectedText\"")
+
+                            // Show "You selected: [text]" in InstructionTooltipService
+                            val feedbackIntent = Intent(this, InstructionTooltipService::class.java).apply {
+                                action = InstructionTooltipService.ACTION_SHOW_SELECTED_TEXT
+                                putExtra(InstructionTooltipService.EXTRA_SELECTED_TEXT, selectedText.toString())
+                            }
+                            startService(feedbackIntent)
+
+                            // Proceed to translate
                             processText(selectedText.toString())
                         } else {
-                            Log.i(TAG, "Selected text \"$selectedText\" is same as last, skipping.")
+                            Log.i(TAG, "Selected text \"$selectedText\" is same as last, skipping actual processing but will show feedback.")
+                            // Optionally, still show feedback even if text is same as last for immediate confirmation
+                            val feedbackIntent = Intent(this, InstructionTooltipService::class.java).apply {
+                                action = InstructionTooltipService.ACTION_SHOW_SELECTED_TEXT
+                                putExtra(InstructionTooltipService.EXTRA_SELECTED_TEXT, selectedText.toString())
+                            }
+                            startService(feedbackIntent)
                         }
                     } else {
-                        Log.d(TAG, "No valid text extracted to process.")
+                        Log.d(TAG, "No valid text extracted to process for feedback/translation.")
                     }
                 }
             }
         }
     }
 
+    // ... processText(), onServiceConnected(), onInterrupt(), onDestroy() methods remain largely the same ...
+    // Make sure onServiceConnected sends the broadcast, and onInterrupt/onDestroy also call ACTION_HIDE for InstructionTooltipService
     private fun processText(text: String) {
         Log.d(TAG, "processText called with text: \"$text\"")
-        TranslationApiClient.translate(text, "en", "es") { translatedText ->
+        // TranslationApiClient.translate(...) will call HoverTranslateService
+        TranslationApiClient.translate(text, "en", "bn") { translatedText -> // Changed to bn
             if (translatedText != null) {
                 Log.i(TAG, "Translated text: \"$translatedText\" for original: \"$text\"")
                 val intent = Intent(this, HoverTranslateService::class.java).apply {
@@ -168,7 +199,7 @@ class MyTextSelectionService : AccessibilityService() {
                     Log.d(TAG, "Attempting to start HoverTranslateService...")
                     startService(intent)
                     Log.i(TAG, "HoverTranslateService started successfully.")
-                } catch (e: Exception) { // Catch generic Exception as well
+                } catch (e: Exception) {
                     Log.e(TAG, "Could not start HoverTranslateService.", e)
                 }
             } else {
@@ -179,7 +210,6 @@ class MyTextSelectionService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        // DO NOT start foreground here automatically. Wait for ACTION_START_FEATURE.
         val info = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
@@ -190,22 +220,34 @@ class MyTextSelectionService : AccessibilityService() {
         }
         this.serviceInfo = info
         Log.i(TAG, "Accessibility Service Connected and configured (awaiting start command).")
-        // Update MainActivity UI if it's visible
         sendBroadcast(Intent(MainActivity.ACTION_UPDATE_UI))
     }
 
     override fun onInterrupt() {
+         // Important to call super
         Log.e(TAG, "Accessibility Service Interrupted. Stopping feature.")
-        isFeatureActive = false
-        stopForeground(true)
-        sendBroadcast(Intent(MainActivity.ACTION_UPDATE_UI))
+        if (isFeatureActive) {
+            isFeatureActive = false
+            stopForeground(true)
+            val instructionIntent = Intent(this, InstructionTooltipService::class.java).apply {
+                action = InstructionTooltipService.ACTION_HIDE
+            }
+            startService(instructionIntent)
+            sendBroadcast(Intent(MainActivity.ACTION_UPDATE_UI))
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         Log.i(TAG, "Accessibility Service Destroyed. Stopping feature.")
-        isFeatureActive = false
-        stopForeground(true)
-        sendBroadcast(Intent(MainActivity.ACTION_UPDATE_UI))
+        if (isFeatureActive) { // Check if it was active to avoid issues
+            isFeatureActive = false
+            stopForeground(true) // This might already be called if onInterrupt was called.
+            val instructionIntent = Intent(this, InstructionTooltipService::class.java).apply {
+                action = InstructionTooltipService.ACTION_HIDE
+            }
+            startService(instructionIntent) // Attempt to hide if it was showing
+        }
+        // No need to send broadcast from onDestroy as activity might not be listening
     }
 }

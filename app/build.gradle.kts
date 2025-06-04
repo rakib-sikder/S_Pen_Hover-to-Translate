@@ -42,7 +42,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 dependencies {
     implementation("androidx.core:core-ktx:1.9.0") // Example, you might have this already
 //    implementation("androidx.appcompat:appcompat:1.6.1") // Example, you might have this already
-
+    implementation("com.google.mlkit:translate:17.0.2")
     // Add this line for Material Components
     implementation("com.google.android.material:material:1.12.0") // Use the latest stable version
     implementation("androidx.multidex:multidex:2.0.1")

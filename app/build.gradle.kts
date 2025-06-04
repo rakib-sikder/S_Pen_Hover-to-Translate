@@ -6,61 +6,74 @@ plugins {
 
 android {
     namespace = "com.sikder.spentranslator"
-    compileSdk = 35
+    compileSdk = 34 // Or your current compileSdk
 
-    defaultConfig {
-        applicationId = "com.sikder.spentranslator"
-        minSdk = 30
-        targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
-
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
-    }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-    kotlinOptions {
-        jvmTarget = "11"
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
     buildFeatures {
         compose = true
     }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.14" // Or libs.versions.compose.compiler.get() if defined in version catalog
+    }
+    defaultConfig {
+        applicationId = "com.sikder.spentranslator"
+        minSdk = 26 // <--- CHANGE THIS TO 26 (or higher if desired)
+        targetSdk = 34 // Or your current targetSdk
+        versionCode = 1
+        versionName = "1.0"
+        // ...
+    testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    // ...
 }
 
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    kotlinOptions {
+        jvmTarget = "1.8" // <--- This tells Kotlin to target JVM 1.8
+    }
+}
+// In your app/build.gradle.kts file
+
 dependencies {
-    implementation("androidx.core:core-ktx:1.13.1") // Or latest
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2") // Or latest
-    implementation("androidx.activity:activity-compose:1.9.0") // <<-- ADD OR UPDATE THIS LINE (check for latest version)
-    implementation(platform("androidx.compose:compose-bom:2024.05.00")) // Or your Compose BOM version
+    implementation("androidx.core:core-ktx:1.9.0") // Example, you might have this already
+//    implementation("androidx.appcompat:appcompat:1.6.1") // Example, you might have this already
+
+    // Add this line for Material Components
+    implementation("com.google.android.material:material:1.12.0") // Use the latest stable version
+
+    // ... other dependencies
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4") // Example
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    implementation("androidx.core:core-ktx:1.9.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4") // Example
+
+    // Add Jetpack Compose BOM and Dependencies
+    val composeBom = platform("androidx.compose:compose-bom:2024.06.00") // Use the latest stable BOM version
+    implementation(composeBom)
+    androidTestImplementation(composeBom) // For UI tests
+
     implementation("androidx.compose.ui:ui")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0") // Check for the latest version of OkHttp
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.ui)
-    implementation(libs.androidx.ui.graphics)
-    implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.material3)
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.ui.test.junit4)
-    debugImplementation(libs.androidx.ui.tooling)
-    debugImplementation(libs.androidx.ui.test.manifest)
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview") // For @Preview
+    implementation("androidx.compose.material3:material3") // For Material Design 3 components
+    // Or if you are using Material 2: implementation("androidx.compose.material:material")
+
+    // Integration with activities
+    implementation("androidx.activity:activity-compose:1.9.0") // Use latest stable version
+
+    // Integration with ViewModels (optional, but common)
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0") // Use latest stable version
+
+    // Other existing dependencies
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+
 }

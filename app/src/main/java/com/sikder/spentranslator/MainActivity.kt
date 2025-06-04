@@ -1,292 +1,179 @@
 package com.sikder.spentranslator
 
-import android.content.Intent // Keep for potential future use (e.g., sharing)
+import android.Manifest // Needed for POST_NOTIFICATIONS
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager // Needed for checking permission status
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.util.Log
-import android.widget.Toast // For user feedback
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField // For ExposedDropdownMenuBox
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import com.sikder.spentranslator.network.TranslationApiClient // Ensure this path is correct
-// Removed HoverTranslateService import as it's not used in this version
-import com.sikder.spentranslator.ui.theme.SPenTranslatorTheme
-import kotlinx.coroutines.launch
+import android.provider.Settings
+import android.text.TextUtils
+import android.util.Log // Good to have for debugging
+import android.widget.Button
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat // Needed for requesting permissions
+import androidx.core.content.ContextCompat // Needed for checking permissions
+import com.sikder.spentranslator.services.MyTextSelectionService
 
-// Define language list (can be moved to a constants file or ViewModel later)
-val supportedLanguages = listOf(
-    "English" to "en",
-    "Bengali" to "bn",
-    "Spanish" to "es",
-    "French" to "fr",
-    "German" to "de",
-    "Hindi" to "hi",
-    "Arabic" to "ar",
-    "Japanese" to "ja",
-    "Russian" to "ru",
-    "Portuguese" to "pt"
-    // Add more as needed
-)
+class MainActivity : AppCompatActivity() {
 
-class MainActivity : ComponentActivity() {
-    private val TAG = "StandardTranslator"
-    private val apiClient = TranslationApiClient()
+    private val TAG = "MainActivity" // For logging
+
+    // Launcher for overlay permission result
+    private val overlayPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (Settings.canDrawOverlays(this)) {
+                    Toast.makeText(this, "Overlay permission granted!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Overlay permission was not granted.", Toast.LENGTH_LONG).show()
+                }
+                updateButtonStates() // Update button text after returning from settings
+            }
+        }
+
+    // Request code for notification permission
+    private val NOTIFICATION_PERMISSION_REQ_CODE = 123
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            var translatedText by remember { mutableStateOf("Translation will appear here.") }
-            // Explicitly typing the state variable
-            var isLoadingTranslation: Boolean by remember { mutableStateOf(false) }
-            var textToTranslateInput by remember { mutableStateOf("") }
+        setContentView(R.layout.activity_main) // Make sure activity_main.xml is in res/layout
 
-            var sourceLanguageCode by remember { mutableStateOf("en") }
-            var targetLanguageCode by remember { mutableStateOf("bn") }
+        val btnEnableAccessibility: Button = findViewById(R.id.btnEnableAccessibility)
+        val btnEnableOverlay: Button = findViewById(R.id.btnEnableOverlay)
+        // You can add a button for notification permission if you want explicit user trigger,
+        // or request it automatically as done below.
 
-            val coroutineScope = rememberCoroutineScope()
-            val context = LocalContext.current // Keep for Toasts or other context needs
-
-            SPenTranslatorTheme {
-                // Removed the Box with pointerInput modifier
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    ScreenContent(
-                        textToTranslate = textToTranslateInput,
-                        onTextToTranslateChange = { newText -> textToTranslateInput = newText },
-                        translation = translatedText,
-                        isLoading = isLoadingTranslation, // This passes the state to ScreenContent
-                        sourceLangCode = sourceLanguageCode,
-                        onSourceLangChange = { newLangCode -> sourceLanguageCode = newLangCode },
-                        targetLangCode = targetLanguageCode,
-                        onTargetLangChange = { newLangCode -> targetLanguageCode = newLangCode },
-                        availableLanguages = supportedLanguages,
-                        onTranslateClick = { // This lambda is defined in MainActivity's setContent scope
-                            if (textToTranslateInput.isNotBlank()) {
-                                isLoadingTranslation = true // Accessing isLoadingTranslation from MainActivity's scope
-                                coroutineScope.launch {
-                                    Log.d(TAG, "Attempting to translate '$textToTranslateInput' from $sourceLanguageCode to $targetLanguageCode")
-                                    val result = apiClient.translate(textToTranslateInput, sourceLanguageCode, targetLanguageCode)
-                                    translatedText = result ?: "Translation failed / not found for '$textToTranslateInput'."
-                                    isLoadingTranslation = false // Accessing isLoadingTranslation from MainActivity's scope
-                                    Log.d(TAG, "Translation API call finished. Result: $translatedText")
-                                }
-                            } else {
-                                Toast.makeText(context, "Please enter text to translate", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier.padding(innerPadding)
-                    )
+        btnEnableAccessibility.setOnClickListener {
+            if (!isAccessibilityServiceEnabled(this, MyTextSelectionService::class.java)) {
+                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                Toast.makeText(this, "Please find and enable '${getString(R.string.accessibility_service_label)}'", Toast.LENGTH_LONG).show()
+                try {
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Could not open Accessibility Settings.", Toast.LENGTH_SHORT).show()
+                    Log.e(TAG, "Error opening Accessibility Settings", e)
                 }
+            } else {
+                Toast.makeText(this, "Accessibility Service is already enabled.", Toast.LENGTH_SHORT).show()
             }
         }
-        Log.d(TAG, "MainActivity (Standard Translator) loaded.")
+
+        btnEnableOverlay.setOnClickListener {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                try {
+                    overlayPermissionLauncher.launch(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Could not open Overlay Permission Settings.", Toast.LENGTH_SHORT).show()
+                    Log.e(TAG, "Error opening Overlay Permission Settings", e)
+                }
+            } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+                Toast.makeText(this, "Overlay permission is not required before Android M.", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Overlay permission is already granted.", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Request Notification Permission when activity is created (for Android 13+)
+        requestNotificationPermission()
     }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ScreenContent(
-    textToTranslate: String,
-    onTextToTranslateChange: (String) -> Unit,
-    translation: String,
-    isLoading: Boolean, // This is the parameter used within ScreenContent
-    sourceLangCode: String,
-    onSourceLangChange: (String) -> Unit,
-    targetLangCode: String,
-    onTargetLangChange: (String) -> Unit,
-    availableLanguages: List<Pair<String, String>>,
-    onTranslateClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Simple Translator",
-            style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+    override fun onResume() {
+        super.onResume()
+        Log.d(TAG, "onResume called, updating button states.")
+        updateButtonStates() // Update button states when returning to the activity
+    }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            LanguageSelector(
-                label = "From",
-                selectedLangCode = sourceLangCode,
-                onLanguageChange = onSourceLangChange,
-                availableLanguages = availableLanguages,
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            LanguageSelector(
-                label = "To",
-                selectedLangCode = targetLangCode,
-                onLanguageChange = onTargetLangChange,
-                availableLanguages = availableLanguages,
-                modifier = Modifier.weight(1f)
-            )
-        }
+    private fun updateButtonStates() {
+        val btnEnableAccessibility: Button = findViewById(R.id.btnEnableAccessibility)
+        val btnEnableOverlay: Button = findViewById(R.id.btnEnableOverlay)
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = textToTranslate,
-            onValueChange = onTextToTranslateChange,
-            label = { Text("Enter text to translate") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            minLines = 3,
-            colors = TextFieldDefaults.colors(
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.Gray,
-                focusedContainerColor = Color(0xFF3A3A3C),
-                unfocusedContainerColor = Color(0xFF2C2C2E),
-                disabledContainerColor = Color(0xFF2C2C2E),
-                cursorColor = Color.White,
-                focusedIndicatorColor = Color.Cyan,
-                unfocusedIndicatorColor = Color.DarkGray,
-                focusedLabelColor = Color.Cyan,
-                unfocusedLabelColor = Color.Gray,
-            )
-        )
-
-        Button(
-            onClick = onTranslateClick,
-            enabled = !isLoading, // Uses the 'isLoading' parameter of ScreenContent
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF))
-        ) {
-            Text("Translate")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (isLoading) { // Uses the 'isLoading' parameter of ScreenContent
-            CircularProgressIndicator(modifier = Modifier.padding(bottom = 8.dp))
-            Text("Translating...")
+        if (isAccessibilityServiceEnabled(this, MyTextSelectionService::class.java)) {
+            btnEnableAccessibility.text = getString(R.string.accessibility_service_enabled_text) // Using string resource
         } else {
-            Text(text = "Translation:", style = androidx.compose.material3.MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-            Text(
-                text = translation,
-                style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 8.dp)
-            )
+            btnEnableAccessibility.text = getString(R.string.enable_accessibility_service)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (Settings.canDrawOverlays(this)) {
+                btnEnableOverlay.text = getString(R.string.overlay_permission_granted_text) // Using string resource
+            } else {
+                btnEnableOverlay.text = getString(R.string.enable_overlay_permission)
+            }
+        } else {
+            btnEnableOverlay.text = getString(R.string.overlay_permission_not_required_text) // Using string resource
         }
     }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun LanguageSelector(
-    label: String,
-    selectedLangCode: String,
-    onLanguageChange: (String) -> Unit,
-    availableLanguages: List<Pair<String, String>>,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val selectedLanguageDisplayName = availableLanguages.find { it.second == selectedLangCode }?.first ?: selectedLangCode
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // TIRAMISU is API 33 (Android 13)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "Notification permission already granted.")
+                // You could update a UI element here if you had one for notification status
+            } else if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.POST_NOTIFICATIONS)) {
+                // Show an explanation to the user why you need this permission
+                // For example, show a dialog and then request permission
+                Log.d(TAG, "Showing rationale for notification permission.")
+                Toast.makeText(this, "Notification permission is needed to show service status.", Toast.LENGTH_LONG).show()
+                // Then request:
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQ_CODE)
+            }
+            else {
+                // No explanation needed; request the permission
+                Log.d(TAG, "Requesting notification permission.")
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQ_CODE)
+            }
+        } else {
+            Log.d(TAG, "Notification permission not required for this Android version (Below TIRAMISU).")
+        }
+    }
 
-    Column(modifier = modifier) {
-        Text(text = label, color = Color.Gray, modifier = Modifier.padding(bottom = 4.dp))
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = !expanded },
-        ) {
-            TextField(
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth(),
-                readOnly = true,
-                value = selectedLanguageDisplayName,
-                onValueChange = {},
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                colors = TextFieldDefaults.colors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedContainerColor = Color(0xFF3A3A3C),
-                    unfocusedContainerColor = Color(0xFF2C2C2E),
-                    disabledContainerColor = Color(0xFF2C2C2E),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent,
-                ),
-                singleLine = true
-            )
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-            ) {
-                availableLanguages.forEach { selectionOption ->
-                    DropdownMenuItem(
-                        text = { Text(selectionOption.first) },
-                        onClick = {
-                            onLanguageChange(selectionOption.second)
-                            expanded = false
-                        },
-                        contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
-                    )
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            NOTIFICATION_PERMISSION_REQ_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(this, "Notification permission granted!", Toast.LENGTH_SHORT).show()
+                    Log.d(TAG, "Notification permission granted by user.")
+                } else {
+                    Toast.makeText(this, "Notification permission was not granted.", Toast.LENGTH_LONG).show()
+                    Log.w(TAG, "Notification permission denied by user.")
+                    // Optionally, guide the user to app settings if they permanently deny it
+                    // and the feature is critical.
                 }
+                return
+            }
+            // Handle other permission request codes if you have them
+        }
+    }
+
+    private fun isAccessibilityServiceEnabled(context: Context, service: Class<*>): Boolean {
+        val expectedComponentName = ComponentName(context, service)
+        val enabledServicesSetting = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        )
+        if (enabledServicesSetting == null) { // Check for null directly
+            return false
+        }
+
+        val colonSplitter = TextUtils.SimpleStringSplitter(':')
+        colonSplitter.setString(enabledServicesSetting)
+        while (colonSplitter.hasNext()) {
+            val componentNameString = colonSplitter.next()
+            val enabledService = ComponentName.unflattenFromString(componentNameString)
+            if (enabledService != null && enabledService == expectedComponentName) {
+                return true
             }
         }
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = 0xFF1C1C1E)
-@Composable
-fun DefaultPreview() {
-    SPenTranslatorTheme {
-        ScreenContent(
-            textToTranslate = "Hello there",
-            onTextToTranslateChange = {},
-            translation = "ওহে আচ্ছা",
-            isLoading = false,
-            sourceLangCode = "en",
-            onSourceLangChange = {},
-            targetLangCode = "bn",
-            onTargetLangChange = {},
-            availableLanguages = supportedLanguages,
-            onTranslateClick = {}
-        )
+        return false
     }
 }

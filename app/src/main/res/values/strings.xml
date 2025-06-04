@@ -1,3 +1,12 @@
 <resources>
-    <string name="app_name">SPenTranslator</string>
+    <string name="app_name">SpentTranslator</string>
+    <string name="accessibility_service_label">My Text Translator Service</string>
+    <string name="accessibility_service_description">This service allows the app to read selected text and display translations.</string>
+
+    <string name="enable_accessibility_service">Enable Accessibility Service</string>
+    <string name="accessibility_service_enabled_text">Accessibility Service (Enabled)</string>
+
+    <string name="enable_overlay_permission">Enable Overlay Permission</string>
+    <string name="overlay_permission_granted_text">Overlay Permission (Granted)</string>
+    <string name="overlay_permission_not_required_text">Overlay Permission (Not Required)</string>
 </resources>

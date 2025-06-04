@@ -1,83 +1,40 @@
-package com.sikder.spentranslator.network
 
+package com.sikder.spentranslator
+
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject // For parsing JSON
 
-class TranslationApiClient {
+object TranslationApiClient {
 
-    private val client = OkHttpClient()
     private val TAG = "TranslationApiClient"
+    private val handler = Handler(Looper.getMainLooper()) // To post results on main thread
 
-    // This function will run on a background thread thanks to withContext(Dispatchers.IO)
-    suspend fun translate(
-        textToTranslate: String,
-        sourceLang: String,
-        targetLang: String
-    ): String? { // Return nullable String for potential errors
-        val langPair = "${sourceLang.toLowerCase()}|${targetLang.toLowerCase()}"
-        val apiUrl = "https://api.mymemory.translated.net/get?q=${encodeURIComponent(textToTranslate)}&langpair=$langPair"
 
-        Log.d(TAG, "Requesting translation from URL: $apiUrl")
+    fun translate(text: String, sourceLang: String, targetLang: String, callback: (String?) -> Unit) {
+        Log.i(TAG, "Requesting translation for: '$text' from $sourceLang to $targetLang")
 
-        val request = Request.Builder()
-            .url(apiUrl)
-            .build()
-
-        return withContext(Dispatchers.IO) { // Perform network call on IO dispatcher
+         Thread {
             try {
-                val response = client.newCall(request).execute()
-                if (response.isSuccessful) {
-                    val responseBody = response.body?.string()
-                    if (responseBody != null) {
-                        Log.d(TAG, "API Raw Response: $responseBody")
-                        // Parse the JSON response
-                        val jsonResponse = JSONObject(responseBody)
-                        val responseData = jsonResponse.optJSONObject("responseData")
-                        val translatedText = responseData?.optString("translatedText")
+                Thread.sleep(1000) // Simulate network delay
+                val dummyTranslation = "Translated: $text [to $targetLang]" // Replace with actual translation
 
-                        if (translatedText.isNullOrEmpty() || translatedText.equals(textToTranslate, ignoreCase = true)) {
-                            // Try to get from matches if primary is not good
-                            val matches = jsonResponse.optJSONArray("matches")
-                            if (matches != null && matches.length() > 0) {
-                                // Simplistic: take the first match's translation
-                                // A more robust approach would iterate and check quality/reliability
-                                val firstMatch = matches.getJSONObject(0)
-                                val matchTranslation = firstMatch.optString("translation")
-                                if (!matchTranslation.isNullOrEmpty() && !matchTranslation.equals(textToTranslate, ignoreCase = true)) {
-                                    Log.d(TAG, "Using translation from matches: $matchTranslation")
-                                    return@withContext matchTranslation
-                                }
-                            }
-                            Log.w(TAG, "Translated text is empty, same as input, or not found in responseData.")
-                            return@withContext null // Or throw an exception
-                        }
-                        Log.d(TAG, "Translated Text: $translatedText")
-                        return@withContext translatedText
-                    } else {
-                        Log.e(TAG, "API response body is null")
-                        return@withContext null
-                    }
-                } else {
-                    Log.e(TAG, "API request failed with code: ${response.code}")
-                    Log.e(TAG, "Response message: ${response.message}")
-                    Log.e(TAG, "Response body: ${response.body?.string()}") // Log error body
-                    return@withContext null
+                // Post result back to the main thread
+                handler.post {
+                    callback(dummyTranslation)
+                }
+            } catch (e: InterruptedException) {
+                Log.e(TAG, "Translation simulation interrupted", e)
+                handler.post {
+                    callback(null)
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Network request failed: ${e.message}", e)
-                return@withContext null
+                Log.e(TAG, "Error during translation simulation", e)
+                handler.post {
+                    callback(null)
+                }
             }
-        }
-    }
-
-    // Helper function for URL encoding (OkHttp usually handles this for query parameters if built properly,
-    // but explicit encoding for path segments or complex queries is safer)
-    private fun encodeURIComponent(str: String): String {
-        return java.net.URLEncoder.encode(str, "UTF-8")
-            .replace("\\+".toRegex(), "%20")
+        }.start()
+        // --- END SIMULATION ---
     }
 }

@@ -1,35 +1,47 @@
 package com.sikder.spentranslator
 
-import android.app.Activity // For Activity.RESULT_OK
-import android.content.Context
-import android.content.Intent
-import android.media.projection.MediaProjectionManager // Import for screen capture
-import android.net.Uri
-import android.os.Build
+import android.content.Intent // Keep for potential future use (e.g., sharing)
 import android.os.Bundle
-import android.provider.Settings
 import android.util.Log
-import android.widget.Toast
+import android.widget.Toast // For user feedback
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts // For StartActivityForResult
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField // For ExposedDropdownMenuBox
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.PointerEvent
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.PointerType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.sikder.spentranslator.network.TranslationApiClient
-import com.sikder.spentranslator.services.HoverTranslateService // Ensure this path is correct
+import com.sikder.spentranslator.network.TranslationApiClient // Ensure this path is correct
+// Removed HoverTranslateService import as it's not used in this version
 import com.sikder.spentranslator.ui.theme.SPenTranslatorTheme
 import kotlinx.coroutines.launch
 
@@ -49,180 +61,59 @@ val supportedLanguages = listOf(
 )
 
 class MainActivity : ComponentActivity() {
-    private val TAG = "SPenMainActivity"
+    private val TAG = "StandardTranslator"
     private val apiClient = TranslationApiClient()
-
-    // Initialize lateinit var for MediaProjectionManager
-    private lateinit var mediaProjectionManager: MediaProjectionManager
-    // ActivityResultLaunchers must be initialized during Activity's initialization phase
-    // (e.g. as a member or in an init block or onCreate before setContent)
-    private lateinit var screenCaptureLauncher: ActivityResultLauncher<Intent>
-    private lateinit var overlayPermissionLauncher: ActivityResultLauncher<Intent>
-
-    // Flag to coordinate permission requests
-    private var shouldRequestScreenCaptureAfterOverlay = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-
-        // Launcher for Overlay Permission settings screen
-        overlayPermissionLauncher = registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult()
-        ) { _ -> // We don't use the result object directly
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (Settings.canDrawOverlays(this)) {
-                    Toast.makeText(this, "Overlay permission granted!", Toast.LENGTH_SHORT).show()
-                    if (shouldRequestScreenCaptureAfterOverlay) {
-                        // Now that overlay permission is granted, request screen capture permission
-                        Log.d(TAG, "Overlay granted, now requesting screen capture permission.")
-                        screenCaptureLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
-                    }
-                } else {
-                    Toast.makeText(this, "Overlay permission was not granted.", Toast.LENGTH_SHORT).show()
-                    shouldRequestScreenCaptureAfterOverlay = false // Reset flag if permission denied
-                }
-            }
-        }
-
-        // Launcher for Screen Capture Permission
-        screenCaptureLauncher = registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult()
-        ) { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                val data: Intent? = result.data
-                if (data != null) {
-                    Log.d(TAG, "Screen capture permission granted. Starting service with MediaProjection data.")
-                    startHoverServiceWithMediaProjection(result.resultCode, data)
-                } else {
-                    Log.e(TAG, "Screen capture permission granted, but data is null.")
-                    Toast.makeText(this, "Failed to get screen capture token.", Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                Log.w(TAG, "Screen capture permission denied by user.")
-                Toast.makeText(this, "Screen capture permission is required for this feature.", Toast.LENGTH_SHORT).show()
-            }
-            shouldRequestScreenCaptureAfterOverlay = false // Reset flag after attempt
-        }
-
-
         enableEdgeToEdge()
         setContent {
-            var sPenLogMessage by remember { mutableStateOf("S Pen activity...") } // Kept for Logcat
             var translatedText by remember { mutableStateOf("Translation will appear here.") }
-            var isLoadingTranslation by remember { mutableStateOf(false) }
+            // Explicitly typing the state variable
+            var isLoadingTranslation: Boolean by remember { mutableStateOf(false) }
             var textToTranslateInput by remember { mutableStateOf("") }
+
             var sourceLanguageCode by remember { mutableStateOf("en") }
             var targetLanguageCode by remember { mutableStateOf("bn") }
 
             val coroutineScope = rememberCoroutineScope()
-            // val context = LocalContext.current // 'this' (MainActivity) is a Context
+            val context = LocalContext.current // Keep for Toasts or other context needs
 
             SPenTranslatorTheme {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val event: PointerEvent = awaitPointerEvent()
-                                    val isStylus = event.changes.any { it.type == PointerType.Stylus }
-
-                                    if (isStylus) {
-                                        val position = event.changes.first().position
-                                        val x = String.format("%.2f", position.x)
-                                        val y = String.format("%.2f", position.y)
-                                        val eventType = event.type
-                                        val newLog: String = when (eventType) {
-                                            PointerEventType.Enter -> "S Pen ENTER: x=$x, y=$y"
-                                            PointerEventType.Move -> "S Pen MOVE: x=$x, y=$y"
-                                            PointerEventType.Exit -> "S Pen EXIT: x=$x, y=$y"
-                                            else -> sPenLogMessage
-                                        }
-                                        sPenLogMessage = newLog
-                                        Log.d(TAG, newLog)
-
-                                        if (eventType == PointerEventType.Exit &&
-                                            !isLoadingTranslation &&
-                                            textToTranslateInput.isNotBlank()
-                                        ) {
-                                            isLoadingTranslation = true
-                                            coroutineScope.launch {
-                                                Log.d(TAG, "Attempting to translate '$textToTranslateInput' from $sourceLanguageCode to $targetLanguageCode")
-                                                val result = apiClient.translate(textToTranslateInput, sourceLanguageCode, targetLanguageCode)
-                                                translatedText = result ?: "Translation failed / not found for '$textToTranslateInput'."
-                                                isLoadingTranslation = false
-                                                Log.d(TAG, "Translation API call finished. Result: $translatedText")
-                                            }
-                                        }
-                                    }
+                // Removed the Box with pointerInput modifier
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    ScreenContent(
+                        textToTranslate = textToTranslateInput,
+                        onTextToTranslateChange = { newText -> textToTranslateInput = newText },
+                        translation = translatedText,
+                        isLoading = isLoadingTranslation, // This passes the state to ScreenContent
+                        sourceLangCode = sourceLanguageCode,
+                        onSourceLangChange = { newLangCode -> sourceLanguageCode = newLangCode },
+                        targetLangCode = targetLanguageCode,
+                        onTargetLangChange = { newLangCode -> targetLanguageCode = newLangCode },
+                        availableLanguages = supportedLanguages,
+                        onTranslateClick = { // This lambda is defined in MainActivity's setContent scope
+                            if (textToTranslateInput.isNotBlank()) {
+                                isLoadingTranslation = true // Accessing isLoadingTranslation from MainActivity's scope
+                                coroutineScope.launch {
+                                    Log.d(TAG, "Attempting to translate '$textToTranslateInput' from $sourceLanguageCode to $targetLanguageCode")
+                                    val result = apiClient.translate(textToTranslateInput, sourceLanguageCode, targetLanguageCode)
+                                    translatedText = result ?: "Translation failed / not found for '$textToTranslateInput'."
+                                    isLoadingTranslation = false // Accessing isLoadingTranslation from MainActivity's scope
+                                    Log.d(TAG, "Translation API call finished. Result: $translatedText")
                                 }
+                            } else {
+                                Toast.makeText(context, "Please enter text to translate", Toast.LENGTH_SHORT).show()
                             }
-                        }
-                ) {
-                    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                        ScreenContent(
-                            textToTranslate = textToTranslateInput,
-                            onTextToTranslateChange = { newText -> textToTranslateInput = newText },
-                            translation = translatedText,
-                            isLoading = isLoadingTranslation,
-                            sourceLangCode = sourceLanguageCode,
-                            onSourceLangChange = { newLangCode -> sourceLanguageCode = newLangCode },
-                            targetLangCode = targetLanguageCode,
-                            onTargetLangChange = { newLangCode -> targetLanguageCode = newLangCode },
-                            availableLanguages = supportedLanguages,
-                            onStartServiceClick = {
-                                Log.d(TAG, "Start Service button clicked")
-                                shouldRequestScreenCaptureAfterOverlay = true // Set flag
-                                // First, check and request overlay permission
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this@MainActivity)) {
-                                    Toast.makeText(this@MainActivity, "Overlay permission required. Opening settings...", Toast.LENGTH_LONG).show()
-                                    val intent = Intent(
-                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                        Uri.parse("package:${packageName}")
-                                    )
-                                    overlayPermissionLauncher.launch(intent)
-                                } else {
-                                    // Overlay permission already granted, proceed to screen capture permission
-                                    Log.d(TAG, "Overlay permission already granted. Requesting screen capture permission.")
-                                    screenCaptureLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
-                                }
-                            },
-                            onStopServiceClick = {
-                                Log.d(TAG, "Stop Service button clicked")
-                                Toast.makeText(this@MainActivity, "Stopping Hover Service...", Toast.LENGTH_SHORT).show()
-                                Intent(this@MainActivity, HoverTranslateService::class.java).also { intentValue ->
-                                    stopService(intentValue)
-                                }
-                                shouldRequestScreenCaptureAfterOverlay = false // Reset flag
-                            },
-                            modifier = Modifier.padding(innerPadding)
-                        )
-                    }
+                        },
+                        modifier = Modifier.padding(innerPadding)
+                    )
                 }
             }
         }
-    }
-
-    private fun startHoverServiceWithMediaProjection(resultCode: Int, data: Intent) {
-        val serviceIntent = Intent(this, HoverTranslateService::class.java).apply {
-            action = HoverTranslateService.ACTION_START_MEDIA_PROJECTION
-            putExtra(HoverTranslateService.EXTRA_RESULT_CODE, resultCode)
-            putExtra(HoverTranslateService.EXTRA_DATA_INTENT, data)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
+        Log.d(TAG, "MainActivity (Standard Translator) loaded.")
     }
 }
-
-// --- ScreenContent, LanguageSelector, and DefaultPreview Composables ---
-// These should be the same as the last version I provided where ScreenContent
-// no longer takes `logMessage` but includes all other parameters
-// including onStartServiceClick and onStopServiceClick.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -230,23 +121,27 @@ fun ScreenContent(
     textToTranslate: String,
     onTextToTranslateChange: (String) -> Unit,
     translation: String,
-    isLoading: Boolean,
+    isLoading: Boolean, // This is the parameter used within ScreenContent
     sourceLangCode: String,
     onSourceLangChange: (String) -> Unit,
     targetLangCode: String,
     onTargetLangChange: (String) -> Unit,
     availableLanguages: List<Pair<String, String>>,
-    onStartServiceClick: () -> Unit,
-    onStopServiceClick: () -> Unit,
+    onTranslateClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Text(
+            text = "Simple Translator",
+            style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -278,35 +173,44 @@ fun ScreenContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 16.dp),
-            singleLine = false,
+            minLines = 3,
             colors = TextFieldDefaults.colors(
-                focusedTextColor = Color.White, unfocusedTextColor = Color.Gray,
-                focusedContainerColor = Color(0xFF3A3A3C), unfocusedContainerColor = Color(0xFF2C2C2E),
-                disabledContainerColor = Color(0xFF2C2C2E), cursorColor = Color.White,
-                focusedIndicatorColor = Color.Cyan, unfocusedIndicatorColor = Color.DarkGray,
-                focusedLabelColor = Color.Cyan, unfocusedLabelColor = Color.Gray,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.Gray,
+                focusedContainerColor = Color(0xFF3A3A3C),
+                unfocusedContainerColor = Color(0xFF2C2C2E),
+                disabledContainerColor = Color(0xFF2C2C2E),
+                cursorColor = Color.White,
+                focusedIndicatorColor = Color.Cyan,
+                unfocusedIndicatorColor = Color.DarkGray,
+                focusedLabelColor = Color.Cyan,
+                unfocusedLabelColor = Color.Gray,
             )
         )
 
-        if (isLoading) {
+        Button(
+            onClick = onTranslateClick,
+            enabled = !isLoading, // Uses the 'isLoading' parameter of ScreenContent
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007AFF))
+        ) {
+            Text("Translate")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (isLoading) { // Uses the 'isLoading' parameter of ScreenContent
             CircularProgressIndicator(modifier = Modifier.padding(bottom = 8.dp))
             Text("Translating...")
         } else {
-            Text(text = "Translation:", modifier = Modifier.padding(top = 8.dp))
+            Text(text = "Translation:", style = androidx.compose.material3.MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
             Text(
                 text = translation,
+                style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = 8.dp)
             )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            Button(onClick = onStartServiceClick, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))) { Text("Start Hover Service") }
-            Button(onClick = onStopServiceClick, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336))) { Text("Stop Hover Service") }
         }
     }
 }
@@ -325,23 +229,41 @@ fun LanguageSelector(
 
     Column(modifier = modifier) {
         Text(text = label, color = Color.Gray, modifier = Modifier.padding(bottom = 4.dp))
-        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded },
+        ) {
             TextField(
-                modifier = Modifier.menuAnchor().fillMaxWidth(), readOnly = true,
-                value = selectedLanguageDisplayName, onValueChange = {},
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth(),
+                readOnly = true,
+                value = selectedLanguageDisplayName,
+                onValueChange = {},
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 colors = TextFieldDefaults.colors(
-                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                    focusedContainerColor = Color(0xFF3A3A3C), unfocusedContainerColor = Color(0xFF2C2C2E),
-                    disabledContainerColor = Color(0xFF2C2C2E), focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent, disabledIndicatorColor = Color.Transparent,
-                ), singleLine = true
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedContainerColor = Color(0xFF3A3A3C),
+                    unfocusedContainerColor = Color(0xFF2C2C2E),
+                    disabledContainerColor = Color(0xFF2C2C2E),
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                ),
+                singleLine = true
             )
-            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
                 availableLanguages.forEach { selectionOption ->
                     DropdownMenuItem(
                         text = { Text(selectionOption.first) },
-                        onClick = { onLanguageChange(selectionOption.second); expanded = false },
+                        onClick = {
+                            onLanguageChange(selectionOption.second)
+                            expanded = false
+                        },
                         contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
                     )
                 }
@@ -355,12 +277,16 @@ fun LanguageSelector(
 fun DefaultPreview() {
     SPenTranslatorTheme {
         ScreenContent(
-            textToTranslate = "Hello there", onTextToTranslateChange = {},
-            translation = "ওহে আচ্ছা", isLoading = false,
-            sourceLangCode = "en", onSourceLangChange = {},
-            targetLangCode = "bn", onTargetLangChange = {},
+            textToTranslate = "Hello there",
+            onTextToTranslateChange = {},
+            translation = "ওহে আচ্ছা",
+            isLoading = false,
+            sourceLangCode = "en",
+            onSourceLangChange = {},
+            targetLangCode = "bn",
+            onTargetLangChange = {},
             availableLanguages = supportedLanguages,
-            onStartServiceClick = {}, onStopServiceClick = {}
+            onTranslateClick = {}
         )
     }
 }

@@ -24,6 +24,8 @@ android {
         targetSdk = 34 // Or your current targetSdk
         versionCode = 1
         versionName = "1.0"
+        multiDexEnabled =true
+
         // ...
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -43,7 +45,7 @@ dependencies {
 
     // Add this line for Material Components
     implementation("com.google.android.material:material:1.12.0") // Use the latest stable version
-
+    implementation("androidx.multidex:multidex:2.0.1")
     // ... other dependencies
     implementation("androidx.constraintlayout:constraintlayout:2.1.4") // Example
     testImplementation("junit:junit:4.13.2")

@@ -4,9 +4,16 @@
     <string name="accessibility_service_description">This service allows the app to read selected text and display translations.</string>
 
     <string name="enable_accessibility_service">Enable Accessibility Service</string>
-    <string name="accessibility_service_enabled_text">Accessibility Service (Enabled)</string>
+    <string name="accessibility_service_enabled_text">Accessibility Service (System Enabled)</string> <!-- Changed text slightly -->
 
     <string name="enable_overlay_permission">Enable Overlay Permission</string>
     <string name="overlay_permission_granted_text">Overlay Permission (Granted)</string>
     <string name="overlay_permission_not_required_text">Overlay Permission (Not Required)</string>
+
+    <!-- New Strings -->
+    <string name="start_select_to_translate">Start Select-to-Translate</string>
+    <string name="stop_select_to_translate">Stop Select-to-Translate (Active)</string>
+    <string name="select_to_translate_permissions_needed">Enable System Permissions First</string>
+    <string name="notification_select_to_translate_active_title">Select-to-Translate Active</string>
+    <string name="notification_select_to_translate_active_text">Selection feature is running.</string>
 </resources>

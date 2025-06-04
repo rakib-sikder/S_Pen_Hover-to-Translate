@@ -12,11 +12,10 @@ import android.os.Build
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import androidx.core.app.NotificationCompat // Import this
-import com.sikder.spentranslator.MainActivity // Import MainActivity
-import com.sikder.spentranslator.R // Import R
+import androidx.core.app.NotificationCompat
+import com.sikder.spentranslator.MainActivity
+import com.sikder.spentranslator.R
 import com.sikder.spentranslator.TranslationApiClient
-// HoverTranslateService is already imported
 
 class MyTextSelectionService : AccessibilityService() {
 
@@ -28,13 +27,38 @@ class MyTextSelectionService : AccessibilityService() {
     private val NOTIFICATION_CHANNEL_ID = "SpentTranslatorChannel"
     private val NOTIFICATION_ID = 1
 
-    override fun onServiceConnected() {
-        super.onServiceConnected()
-        Log.i(TAG, "Accessibility Service onServiceConnected.")
+    companion object {
+        const val ACTION_START_FEATURE = "com.sikder.spentranslator.ACTION_START_FEATURE"
+        const val ACTION_STOP_FEATURE = "com.sikder.spentranslator.ACTION_STOP_FEATURE"
+        var isFeatureActive = false // Static flag to indicate active state
+        // Note: For more robustness across process death, use SharedPreferences
+    }
 
-        // --- Start Foreground Service Logic ---
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "onStartCommand received action: ${intent?.action}")
+        when (intent?.action) {
+            ACTION_START_FEATURE -> {
+                if (!isFeatureActive) {
+                    isFeatureActive = true
+                    startForegroundServiceNotification()
+                    Log.i(TAG, "Select-to-Translate feature ACTIVATED.")
+                }
+            }
+            ACTION_STOP_FEATURE -> {
+                if (isFeatureActive) {
+                    isFeatureActive = false
+                    stopForeground(true)
+                    Log.i(TAG, "Select-to-Translate feature DEACTIVATED.")
+                    // Consider if stopSelf() is needed or if service should remain for next start
+                }
+            }
+        }
+        return START_STICKY // Or START_NOT_STICKY depending on desired restart behavior
+    }
+
+
+    private fun startForegroundServiceNotification() {
         createNotificationChannel()
-
         val notificationIntent = Intent(this, MainActivity::class.java)
         val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -44,36 +68,19 @@ class MyTextSelectionService : AccessibilityService() {
         val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, pendingIntentFlags)
 
         val notification: Notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("SpentTranslator Active")
-            .setContentText("Text selection service is running.")
-            .setSmallIcon(R.mipmap.ic_launcher) // Replace with your actual app icon
+            .setContentTitle(getString(R.string.notification_select_to_translate_active_title))
+            .setContentText(getString(R.string.notification_select_to_translate_active_text))
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
-            .setOngoing(true) // Makes the notification persistent
+            .setOngoing(true)
             .build()
-
         try {
             startForeground(NOTIFICATION_ID, notification)
             Log.i(TAG, "Service started in foreground.")
         } catch (e: Exception) {
             Log.e(TAG, "Error starting foreground service", e)
-            // Handle different exceptions based on Android version if needed
-            // For example, ForegroundServiceStartNotAllowedException on Android 12+ if conditions not met
-            // Or MissingForegroundServiceTypeException if type is not declared in manifest for targetSdk 34+
+            isFeatureActive = false // Revert state if foreground fails
         }
-        // --- End Foreground Service Logic ---
-
-
-        // Configure the service (your existing logic)
-        val info = AccessibilityServiceInfo().apply {
-            eventTypes = AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
-            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
-                    AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
-            notificationTimeout = 100
-        }
-        this.serviceInfo = info
-        Log.i(TAG, "Accessibility Service Configured.")
     }
 
     private fun createNotificationChannel() {
@@ -81,7 +88,7 @@ class MyTextSelectionService : AccessibilityService() {
             val serviceChannel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
                 "SpentTranslator Service Channel",
-                NotificationManager.IMPORTANCE_LOW // Use LOW to minimize interruption
+                NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(serviceChannel)
@@ -89,19 +96,18 @@ class MyTextSelectionService : AccessibilityService() {
         }
     }
 
-    // ... (onAccessibilityEvent and processText methods remain the same as your last version) ...
-    // Make sure they are here:
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        Log.d(TAG, "onAccessibilityEvent received: eventType=${event?.eventType}, packageName=${event?.packageName}")
-
-        if (event == null) {
-            Log.d(TAG, "Event is null, returning.")
+        if (!isFeatureActive) { // Only process if feature is explicitly started
+            // Log.v(TAG, "Feature not active, ignoring event: ${event?.eventType}")
             return
         }
 
+        Log.d(TAG, "onAccessibilityEvent (active): eventType=${event?.eventType}, pkg=${event?.packageName}")
+        if (event == null) return
+
         when (event.eventType) {
             AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED -> {
-                Log.i(TAG, ">>> TYPE_VIEW_TEXT_SELECTION_CHANGED event detected <<<")
+                Log.i(TAG, ">>> TYPE_VIEW_TEXT_SELECTION_CHANGED event detected (active) <<<")
                 val currentTime = System.currentTimeMillis()
                 if (currentTime - lastProcessedTime < DEBOUNCE_THRESHOLD) {
                     Log.d(TAG, "Debounced event, returning.")
@@ -119,21 +125,19 @@ class MyTextSelectionService : AccessibilityService() {
                 sourceNode.let { node ->
                     var selectedText: CharSequence? = null
                     Log.d(TAG, "Attempting to extract selected text...")
-                    Log.d(TAG, "Node text: \"${node.text}\", SelectionStart: ${node.textSelectionStart}, SelectionEnd: ${node.textSelectionEnd}")
+                    Log.d(TAG, "Node text: \"${node.text}\", SelStart: ${node.textSelectionStart}, SelEnd: ${node.textSelectionEnd}")
 
                     if (node.textSelectionStart != -1 && node.textSelectionEnd != -1 &&
                         node.textSelectionStart < node.textSelectionEnd && node.text != null &&
                         node.textSelectionEnd <= node.text.length) {
                         selectedText = node.text?.subSequence(node.textSelectionStart, node.textSelectionEnd)
                         if (!selectedText.isNullOrEmpty()) {
-                            Log.i(TAG, "Extracted selected text using selection indices: \"$selectedText\"")
+                            Log.i(TAG, "Extracted selected text: \"$selectedText\"")
                         } else {
                             Log.w(TAG, "Subsequence from selection indices was null or empty.")
                         }
                     } else {
                         Log.w(TAG, "Conditions for selection indices not met.")
-                        if(node.text == null) Log.d(TAG, "Reason: node.text is null")
-                        if(node.textSelectionStart == -1) Log.d(TAG, "Reason: node.textSelectionStart is -1")
                     }
 
                     if (!selectedText.isNullOrEmpty() && selectedText.toString().isNotBlank()) {
@@ -142,19 +146,12 @@ class MyTextSelectionService : AccessibilityService() {
                             Log.i(TAG, "Processing NEW selected text: \"$selectedText\"")
                             processText(selectedText.toString())
                         } else {
-                            Log.i(TAG, "Selected text \"$selectedText\" is the same as last processed, skipping.")
+                            Log.i(TAG, "Selected text \"$selectedText\" is same as last, skipping.")
                         }
                     } else {
-                        if (selectedText == null) {
-                            Log.d(TAG, "No text selected or extracted (selectedText is null).")
-                        } else if (selectedText.toString().isBlank()){
-                            Log.d(TAG, "Extracted text is blank, not processing.")
-                        }
+                        Log.d(TAG, "No valid text extracted to process.")
                     }
                 }
-            }
-            else -> {
-                // Log.v(TAG, "Ignoring event type: ${AccessibilityEvent.eventTypeToString(event.eventType)}");
             }
         }
     }
@@ -171,10 +168,8 @@ class MyTextSelectionService : AccessibilityService() {
                     Log.d(TAG, "Attempting to start HoverTranslateService...")
                     startService(intent)
                     Log.i(TAG, "HoverTranslateService started successfully.")
-                } catch (e: IllegalStateException) {
-                    Log.e(TAG, "Could not start HoverTranslateService (IllegalStateException).", e)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Could not start HoverTranslateService (Exception).", e)
+                } catch (e: Exception) { // Catch generic Exception as well
+                    Log.e(TAG, "Could not start HoverTranslateService.", e)
                 }
             } else {
                 Log.e(TAG, "Translation failed for: \"$text\"")
@@ -182,16 +177,35 @@ class MyTextSelectionService : AccessibilityService() {
         }
     }
 
-
-    override fun onInterrupt() {
-        Log.e(TAG, "Accessibility Service Interrupted. Stopping foreground.")
-        stopForeground(true) // Stop foreground when service is interrupted
-        // You might also call stopSelf() if the service should completely stop
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        // DO NOT start foreground here automatically. Wait for ACTION_START_FEATURE.
+        val info = AccessibilityServiceInfo().apply {
+            eventTypes = AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
+            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+            flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                    AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            notificationTimeout = 100
+        }
+        this.serviceInfo = info
+        Log.i(TAG, "Accessibility Service Connected and configured (awaiting start command).")
+        // Update MainActivity UI if it's visible
+        sendBroadcast(Intent(MainActivity.ACTION_UPDATE_UI))
     }
 
-    override fun onDestroy() { // It's good practice to also handle onDestroy
+    override fun onInterrupt() {
+        Log.e(TAG, "Accessibility Service Interrupted. Stopping feature.")
+        isFeatureActive = false
+        stopForeground(true)
+        sendBroadcast(Intent(MainActivity.ACTION_UPDATE_UI))
+    }
+
+    override fun onDestroy() {
         super.onDestroy()
-        Log.i(TAG, "Accessibility Service Destroyed. Stopping foreground.")
-        stopForeground(true) // Ensure foreground is stopped
+        Log.i(TAG, "Accessibility Service Destroyed. Stopping feature.")
+        isFeatureActive = false
+        stopForeground(true)
+        sendBroadcast(Intent(MainActivity.ACTION_UPDATE_UI))
     }
 }

@@ -1,176 +1,226 @@
 package com.sikder.spentranslator
 
-import android.Manifest // Needed for POST_NOTIFICATIONS
+import android.Manifest
+import android.app.ActivityManager
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager // Needed for checking permission status
+import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.TextUtils
-import android.util.Log // Good to have for debugging
+import android.util.Log
 import android.widget.Button
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat // Needed for requesting permissions
-import androidx.core.content.ContextCompat // Needed for checking permissions
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager // Optional for local broadcasts
 import com.sikder.spentranslator.services.MyTextSelectionService
 
 class MainActivity : AppCompatActivity() {
 
-    private val TAG = "MainActivity" // For logging
+    private val TAG = "MainActivity"
+    private lateinit var btnEnableAccessibility: Button
+    private lateinit var btnEnableOverlay: Button
+    private lateinit var btnToggleSelectToTranslate: Button
 
-    // Launcher for overlay permission result
+    private val NOTIFICATION_PERMISSION_REQ_CODE = 123
+
+    companion object {
+        const val ACTION_UPDATE_UI = "com.sikder.spentranslator.ACTION_UPDATE_UI"
+    }
+
+    private val uiUpdateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ACTION_UPDATE_UI) {
+                Log.d(TAG, "Received UI update broadcast from service.")
+                updateButtonStates()
+            }
+        }
+    }
+
     private val overlayPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (Settings.canDrawOverlays(this)) {
-                    Toast.makeText(this, "Overlay permission granted!", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this, "Overlay permission was not granted.", Toast.LENGTH_LONG).show()
-                }
-                updateButtonStates() // Update button text after returning from settings
+                updateButtonStates() // Update button text after returning
             }
         }
 
-    // Request code for notification permission
-    private val NOTIFICATION_PERMISSION_REQ_CODE = 123
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main) // Make sure activity_main.xml is in res/layout
+        setContentView(R.layout.activity_main)
 
-        val btnEnableAccessibility: Button = findViewById(R.id.btnEnableAccessibility)
-        val btnEnableOverlay: Button = findViewById(R.id.btnEnableOverlay)
-        // You can add a button for notification permission if you want explicit user trigger,
-        // or request it automatically as done below.
+        btnEnableAccessibility = findViewById(R.id.btnEnableAccessibility)
+        btnEnableOverlay = findViewById(R.id.btnEnableOverlay)
+        btnToggleSelectToTranslate = findViewById(R.id.btnToggleSelectToTranslate)
 
         btnEnableAccessibility.setOnClickListener {
-            if (!isAccessibilityServiceEnabled(this, MyTextSelectionService::class.java)) {
+            if (!isAccessibilityServiceSystemEnabled(this)) {
                 val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                 Toast.makeText(this, "Please find and enable '${getString(R.string.accessibility_service_label)}'", Toast.LENGTH_LONG).show()
                 try {
                     startActivity(intent)
                 } catch (e: Exception) {
-                    Toast.makeText(this, "Could not open Accessibility Settings.", Toast.LENGTH_SHORT).show()
                     Log.e(TAG, "Error opening Accessibility Settings", e)
                 }
             } else {
-                Toast.makeText(this, "Accessibility Service is already enabled.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Accessibility Service is already enabled in system settings.", Toast.LENGTH_SHORT).show()
             }
         }
 
         btnEnableOverlay.setOnClickListener {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
+                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
                 try {
                     overlayPermissionLauncher.launch(intent)
                 } catch (e: Exception) {
-                    Toast.makeText(this, "Could not open Overlay Permission Settings.", Toast.LENGTH_SHORT).show()
                     Log.e(TAG, "Error opening Overlay Permission Settings", e)
                 }
-            } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-                Toast.makeText(this, "Overlay permission is not required before Android M.", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "Overlay permission is already granted.", Toast.LENGTH_SHORT).show()
             }
         }
 
-        // Request Notification Permission when activity is created (for Android 13+)
-        requestNotificationPermission()
+        btnToggleSelectToTranslate.setOnClickListener {
+            if (!isAccessibilityServiceSystemEnabled(this) || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this))) {
+                Toast.makeText(this, getString(R.string.select_to_translate_permissions_needed), Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+
+            val serviceIntent = Intent(this, MyTextSelectionService::class.java)
+            if (MyTextSelectionService.isFeatureActive) {
+                serviceIntent.action = MyTextSelectionService.ACTION_STOP_FEATURE
+                MyTextSelectionService.isFeatureActive = false // Optimistically update
+                Log.d(TAG, "Sending STOP_FEATURE command to service.")
+            } else {
+                serviceIntent.action = MyTextSelectionService.ACTION_START_FEATURE
+                MyTextSelectionService.isFeatureActive = true // Optimistically update
+                Log.d(TAG, "Sending START_FEATURE command to service.")
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && serviceIntent.action == MyTextSelectionService.ACTION_START_FEATURE) {
+                    startForegroundService(serviceIntent) // Required for starting foreground service from background on O+
+                } else {
+                    startService(serviceIntent)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error starting/stopping MyTextSelectionService", e)
+                MyTextSelectionService.isFeatureActive = !MyTextSelectionService.isFeatureActive // Revert optimistic update
+            }
+            updateButtonStates() // Update UI immediately
+        }
+        requestNotificationPermission() // For foreground service notification
+        // In onCreate() of MainActivity.kt
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // TIRAMISU is API 33 where these flags are more strictly enforced for Context.registerReceiver
+            registerReceiver(uiUpdateReceiver, IntentFilter(ACTION_UPDATE_UI), Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            // For older versions, the flag might not be available in this specific registerReceiver overload,
+            // or the behavior was less strict. However, it's good practice.
+            // If targeting below API 33 with this receiver, and it's not meant to be exported,
+            // often it was handled by manifest declaration if it was a manifest-declared receiver,
+            // or LocalBroadcastManager was used for purely internal broadcasts.
+            // For a context-registered receiver listening to custom intents, and if your minSdk is lower,
+            // this flag might not be needed or available for the older registerReceiver method.
+            // However, since your compileSdk and targetSdk are high, it's best to include it with a version check.
+            // A simpler way for a local receiver without worrying about export flags is LocalBroadcastManager.
+            // BUT, to fix the immediate crash for API 31+ targets:
+            registerReceiver(uiUpdateReceiver, IntentFilter(ACTION_UPDATE_UI), RECEIVER_NOT_EXPORTED) // For API 33+, this overload exists.
+            // For API 31, 32, if using targetSdk 31+, this rule still applies.
+            // Let's assume Context.RECEIVER_NOT_EXPORTED is what's needed.
+            // The error implies this flag should be specifiable.
+        }
     }
 
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "onResume called, updating button states.")
-        updateButtonStates() // Update button states when returning to the activity
+        // Check actual service running state for more accuracy if possible
+        // For simplicity, we rely on the static flag and broadcasts for now
+        updateButtonStates()
     }
 
-    private fun updateButtonStates() {
-        val btnEnableAccessibility: Button = findViewById(R.id.btnEnableAccessibility)
-        val btnEnableOverlay: Button = findViewById(R.id.btnEnableOverlay)
+    override fun onPause() {
+        super.onPause()
+        // Consider if unregistering receiver is needed, depends on lifecycle.
+        // For this app, keeping it registered while activity is alive is fine.
+    }
 
-        if (isAccessibilityServiceEnabled(this, MyTextSelectionService::class.java)) {
-            btnEnableAccessibility.text = getString(R.string.accessibility_service_enabled_text) // Using string resource
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(uiUpdateReceiver)
+    }
+
+
+    private fun updateButtonStates() {
+        // System Accessibility Service Permission
+        if (isAccessibilityServiceSystemEnabled(this)) {
+            btnEnableAccessibility.text = getString(R.string.accessibility_service_enabled_text)
+            btnEnableAccessibility.isEnabled = false // Disable if already enabled in system
         } else {
             btnEnableAccessibility.text = getString(R.string.enable_accessibility_service)
+            btnEnableAccessibility.isEnabled = true
         }
 
+        // Overlay Permission
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (Settings.canDrawOverlays(this)) {
-                btnEnableOverlay.text = getString(R.string.overlay_permission_granted_text) // Using string resource
+                btnEnableOverlay.text = getString(R.string.overlay_permission_granted_text)
+                btnEnableOverlay.isEnabled = false // Disable if already granted
             } else {
                 btnEnableOverlay.text = getString(R.string.enable_overlay_permission)
+                btnEnableOverlay.isEnabled = true
             }
         } else {
-            btnEnableOverlay.text = getString(R.string.overlay_permission_not_required_text) // Using string resource
+            btnEnableOverlay.text = getString(R.string.overlay_permission_not_required_text)
+            btnEnableOverlay.isEnabled = false // Not applicable, so disable
+        }
+
+        // Toggle Select-to-Translate Feature Button
+        if (!isAccessibilityServiceSystemEnabled(this) || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this))) {
+            btnToggleSelectToTranslate.text = getString(R.string.select_to_translate_permissions_needed)
+            btnToggleSelectToTranslate.isEnabled = false
+        } else {
+            btnToggleSelectToTranslate.isEnabled = true
+            if (MyTextSelectionService.isFeatureActive) { // Check our static flag
+                btnToggleSelectToTranslate.text = getString(R.string.stop_select_to_translate)
+            } else {
+                btnToggleSelectToTranslate.text = getString(R.string.start_select_to_translate)
+            }
         }
     }
 
     private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // TIRAMISU is API 33 (Android 13)
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-                Log.d(TAG, "Notification permission already granted.")
-                // You could update a UI element here if you had one for notification status
-            } else if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.POST_NOTIFICATIONS)) {
-                // Show an explanation to the user why you need this permission
-                // For example, show a dialog and then request permission
-                Log.d(TAG, "Showing rationale for notification permission.")
-                Toast.makeText(this, "Notification permission is needed to show service status.", Toast.LENGTH_LONG).show()
-                // Then request:
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQ_CODE)
             }
-            else {
-                // No explanation needed; request the permission
-                Log.d(TAG, "Requesting notification permission.")
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQ_CODE)
-            }
-        } else {
-            Log.d(TAG, "Notification permission not required for this Android version (Below TIRAMISU).")
         }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        when (requestCode) {
-            NOTIFICATION_PERMISSION_REQ_CODE -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    Toast.makeText(this, "Notification permission granted!", Toast.LENGTH_SHORT).show()
-                    Log.d(TAG, "Notification permission granted by user.")
-                } else {
-                    Toast.makeText(this, "Notification permission was not granted.", Toast.LENGTH_LONG).show()
-                    Log.w(TAG, "Notification permission denied by user.")
-                    // Optionally, guide the user to app settings if they permanently deny it
-                    // and the feature is critical.
-                }
-                return
+        if (requestCode == NOTIFICATION_PERMISSION_REQ_CODE) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Notification permission granted!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Notification permission needed for service status.", Toast.LENGTH_LONG).show()
             }
-            // Handle other permission request codes if you have them
         }
     }
 
-    private fun isAccessibilityServiceEnabled(context: Context, service: Class<*>): Boolean {
-        val expectedComponentName = ComponentName(context, service)
-        val enabledServicesSetting = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        )
-        if (enabledServicesSetting == null) { // Check for null directly
-            return false
-        }
-
+    private fun isAccessibilityServiceSystemEnabled(context: Context): Boolean {
+        val serviceComponent = ComponentName(context, MyTextSelectionService::class.java)
+        val enabledServicesSetting = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        if (enabledServicesSetting == null) return false
         val colonSplitter = TextUtils.SimpleStringSplitter(':')
         colonSplitter.setString(enabledServicesSetting)
         while (colonSplitter.hasNext()) {
             val componentNameString = colonSplitter.next()
-            val enabledService = ComponentName.unflattenFromString(componentNameString)
-            if (enabledService != null && enabledService == expectedComponentName) {
+            if (componentNameString.equals(serviceComponent.flattenToString(), ignoreCase = true)) {
                 return true
             }
         }

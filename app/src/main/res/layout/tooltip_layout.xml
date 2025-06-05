@@ -3,7 +3,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:background="#E6424242"
+        android:background="@color/tooltip_background_semi_dark"
         android:padding="10dp"
         android:elevation="6dp"
         android:layout_margin="8dp">

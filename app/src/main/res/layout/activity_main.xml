@@ -13,7 +13,38 @@
             android:text="@string/in_app_translator_title"
             android:textSize="20sp"
             android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="16dp"/>
+            android:layout_marginBottom="8dp"/>
+
+    <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+
+        <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/language_from"/>
+        <Spinner
+                android:id="@+id/spinnerSourceLang"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"/>
+
+        <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/language_to"/>
+        <Spinner
+                android:id="@+id/spinnerTargetLang"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"/>
+    </LinearLayout>
 
     <EditText
             android:id="@+id/etSourceText"
@@ -67,21 +98,18 @@
     <Button
             android:id="@+id/btnEnableOverlay"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/enable_overlay_permission"
+            android:layout_height="wrap_content"  android:text="@string/enable_overlay_permission"
             android:layout_marginBottom="8dp"/>
 
     <Button
             android:id="@+id/btnEnableAccessibility"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/enable_accessibility_service"
+            android:layout_height="wrap_content"  android:text="@string/enable_accessibility_service"
             android:layout_marginBottom="16dp"/>
 
     <Button
             android:id="@+id/btnToggleSelectToTranslate"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/start_select_to_translate" />
+            android:layout_height="wrap_content"  android:text="@string/start_select_to_translate" />
 
 </LinearLayout>

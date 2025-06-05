@@ -1,6 +1,7 @@
 package com.sikder.spentranslator
 
 import android.Manifest
+import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
@@ -8,6 +9,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -30,19 +32,14 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.sikder.spentranslator.services.MyTextSelectionService
 
-// Data class to hold language information
-data class Language(val displayName: String, val code: String)
-
 class MainActivity : AppCompatActivity() {
 
     private val TAG = "MainActivity"
 
-    // UI elements for feature control
+    // --- UI Views ---
     private lateinit var btnEnableAccessibility: Button
     private lateinit var btnEnableOverlay: Button
     private lateinit var btnToggleSelectToTranslate: Button
-
-    // UI elements for in-app translation
     private lateinit var etSourceText: EditText
     private lateinit var btnTranslateInApp: Button
     private lateinit var tvTargetText: TextView
@@ -51,7 +48,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var sharedPreferences: SharedPreferences
 
-    // A list of languages you want to support in the dropdowns
     private val supportedLanguages = listOf(
         Language("English", TranslateLanguage.ENGLISH),
         Language("Bengali", TranslateLanguage.BENGALI),
@@ -63,15 +59,40 @@ class MainActivity : AppCompatActivity() {
         Language("Japanese", TranslateLanguage.JAPANESE),
         Language("Korean", TranslateLanguage.KOREAN),
         Language("Russian", TranslateLanguage.RUSSIAN)
-        // Add more languages from com.google.mlkit.nl.translate.TranslateLanguage here
     )
 
     companion object {
         const val ACTION_UPDATE_UI = "com.sikder.spentranslator.ACTION_UPDATE_UI"
+        const val ACTION_REQUEST_SCREEN_CAPTURE_FROM_SERVICE = "com.sikder.spentranslator.REQUEST_SCREEN_CAPTURE"
         private const val NOTIFICATION_PERMISSION_REQUEST = 400
     }
 
-    // Listens for broadcasts from the service to update the UI
+    // --- ActivityResultLaunchers (Modern way to handle results from other activities) ---
+
+    private val settingsLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            Log.d(TAG, "Returned from a settings screen, updating button states.")
+            updateButtonStates()
+        }
+
+    private val screenCaptureLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+                Log.i(TAG, "Screen capture permission GRANTED by user.")
+                // Store the result data in the service's static variables so it can be used for OCR
+                MyTextSelectionService.mediaProjectionResultCode = result.resultCode
+                MyTextSelectionService.mediaProjectionIntent = result.data
+                Toast.makeText(this, "Screen capture enabled. Please select text again to use OCR.", Toast.LENGTH_LONG).show()
+            } else {
+                Log.w(TAG, "Screen capture permission DENIED by user.")
+                Toast.makeText(this, "Screen capture is needed for OCR on some apps.", Toast.LENGTH_SHORT).show()
+                MyTextSelectionService.mediaProjectionResultCode = Activity.RESULT_CANCELED
+                MyTextSelectionService.mediaProjectionIntent = null
+            }
+        }
+
+    // --- BroadcastReceivers ---
+
     private val uiUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_UPDATE_UI) {
@@ -81,29 +102,38 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Modern way to handle returning from settings screens
-    private val settingsLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            Log.d(TAG, "Returned from a settings screen, updating button states.")
-            updateButtonStates()
+    private val screenCaptureRequestReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == MyTextSelectionService.ACTION_REQUEST_SCREEN_CAPTURE) {
+                Log.i(TAG, "Received request from service for screen capture permission.")
+                requestScreenCapturePermission()
+            }
         }
+    }
+
+
+    // --- Activity Lifecycle ---
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Initialize SharedPreferences
         sharedPreferences = getSharedPreferences("SpentTranslatorPrefs", Context.MODE_PRIVATE)
 
         initializeViews()
         setupLanguageSpinners()
         setupClickListeners()
 
-        // For Android 13+, ask for notification permission needed for the foreground service
         requestNotificationPermission()
 
-        // Register a receiver to get UI update requests from the service
+        // Register receivers
         LocalBroadcastManager.getInstance(this).registerReceiver(uiUpdateReceiver, IntentFilter(ACTION_UPDATE_UI))
+        // This receiver listens for requests from the service to show the screen capture permission dialog
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(screenCaptureRequestReceiver, IntentFilter(MyTextSelectionService.ACTION_REQUEST_SCREEN_CAPTURE), RECEIVER_NOT_EXPORTED)
+        } else {
+            LocalBroadcastManager.getInstance(this).registerReceiver(screenCaptureRequestReceiver, IntentFilter(MyTextSelectionService.ACTION_REQUEST_SCREEN_CAPTURE))
+        }
     }
 
     override fun onResume() {
@@ -114,9 +144,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Unregister the receiver to prevent memory leaks
         LocalBroadcastManager.getInstance(this).unregisterReceiver(uiUpdateReceiver)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            unregisterReceiver(screenCaptureRequestReceiver)
+        } else {
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(screenCaptureRequestReceiver)
+        }
     }
+
+    // --- UI Setup and Logic ---
 
     private fun initializeViews() {
         btnEnableAccessibility = findViewById(R.id.btnEnableAccessibility)
@@ -137,31 +173,25 @@ class MainActivity : AppCompatActivity() {
         spinnerSourceLang.adapter = adapter
         spinnerTargetLang.adapter = adapter
 
-        // Restore saved language preferences
         val savedSourceLangCode = sharedPreferences.getString("source_lang_code", TranslateLanguage.ENGLISH)
         val savedTargetLangCode = sharedPreferences.getString("target_lang_code", TranslateLanguage.BENGALI)
 
-        val sourcePosition = supportedLanguages.indexOfFirst { it.code == savedSourceLangCode }
-        val targetPosition = supportedLanguages.indexOfFirst { it.code == savedTargetLangCode }
+        spinnerSourceLang.setSelection(supportedLanguages.indexOfFirst { it.code == savedSourceLangCode }.coerceAtLeast(0))
+        spinnerTargetLang.setSelection(supportedLanguages.indexOfFirst { it.code == savedTargetLangCode }.coerceAtLeast(0))
 
-        spinnerSourceLang.setSelection(if (sourcePosition != -1) sourcePosition else 0)
-        spinnerTargetLang.setSelection(if (targetPosition != -1) targetPosition else 1) // Default to Bengali if not found
-
-        // Listener to save preferences when a new language is selected
-        val languageSelectionListener = object : AdapterView.OnItemSelectedListener {
+        val listener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 saveLanguagePreferences()
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-        spinnerSourceLang.onItemSelectedListener = languageSelectionListener
-        spinnerTargetLang.onItemSelectedListener = languageSelectionListener
+        spinnerSourceLang.onItemSelectedListener = listener
+        spinnerTargetLang.onItemSelectedListener = listener
     }
 
     private fun saveLanguagePreferences() {
         val sourceLangCode = supportedLanguages[spinnerSourceLang.selectedItemPosition].code
         val targetLangCode = supportedLanguages[spinnerTargetLang.selectedItemPosition].code
-
         Log.d(TAG, "Saving language preferences: Source=$sourceLangCode, Target=$targetLangCode")
         sharedPreferences.edit()
             .putString("source_lang_code", sourceLangCode)
@@ -174,86 +204,6 @@ class MainActivity : AppCompatActivity() {
         btnEnableAccessibility.setOnClickListener { requestAccessibilityPermission() }
         btnEnableOverlay.setOnClickListener { requestOverlayPermission() }
         btnToggleSelectToTranslate.setOnClickListener { toggleSelectToTranslateFeature() }
-    }
-
-    private fun requestOverlayPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-            try {
-                settingsLauncher.launch(intent)
-            } catch (e: Exception) {
-                Toast.makeText(this, getString(R.string.overlay_settings_error), Toast.LENGTH_SHORT).show()
-                Log.e(TAG, "Error opening Overlay Permission Settings", e)
-            }
-        }
-    }
-
-    private fun requestAccessibilityPermission() {
-        if (!isAccessibilityServiceSystemEnabled()) {
-            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            Toast.makeText(this, "Please find and enable '${getString(R.string.accessibility_service_label)}'", Toast.LENGTH_LONG).show()
-            try {
-                settingsLauncher.launch(intent)
-            } catch (e: Exception) {
-                Toast.makeText(this, getString(R.string.accessibility_settings_error), Toast.LENGTH_SHORT).show()
-                Log.e(TAG, "Error opening Accessibility Settings", e)
-            }
-        }
-    }
-
-    private fun toggleSelectToTranslateFeature() {
-        if (!isAccessibilityServiceSystemEnabled() || !Settings.canDrawOverlays(this)) {
-            Toast.makeText(this, getString(R.string.select_to_translate_permissions_needed), Toast.LENGTH_LONG).show()
-            return
-        }
-
-        val serviceIntent = Intent(this, MyTextSelectionService::class.java)
-        if (MyTextSelectionService.isFeatureActive) {
-            serviceIntent.action = MyTextSelectionService.ACTION_STOP_FEATURE
-            Log.d(TAG, "Sending STOP_FEATURE command to service.")
-        } else {
-            serviceIntent.action = MyTextSelectionService.ACTION_START_FEATURE
-            Log.d(TAG, "Sending START_FEATURE command to service.")
-            // Minimize app after starting the feature
-            val minimizeIntent = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_HOME)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            startActivity(minimizeIntent)
-        }
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && serviceIntent.action == MyTextSelectionService.ACTION_START_FEATURE) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error starting/stopping MyTextSelectionService", e)
-        }
-    }
-
-    private fun performInAppTranslation() {
-        val sourceText = etSourceText.text.toString().trim()
-        if (sourceText.isNotBlank()) {
-            val sourceLangCode = supportedLanguages[spinnerSourceLang.selectedItemPosition].code
-            val targetLangCode = supportedLanguages[spinnerTargetLang.selectedItemPosition].code
-
-            tvTargetText.text = "Translating..." // Give immediate feedback
-
-            TranslationApiClient.translate(sourceText, sourceLangCode, targetLangCode) { translatedText ->
-                runOnUiThread {
-                    if (translatedText != null) {
-                        tvTargetText.text = translatedText
-                    } else {
-                        tvTargetText.text = getString(R.string.translation_failed)
-                        Toast.makeText(this, getString(R.string.translation_failed), Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        } else {
-            Toast.makeText(this, getString(R.string.enter_text_to_translate), Toast.LENGTH_SHORT).show()
-        }
     }
 
     private fun updateButtonStates() {
@@ -275,6 +225,68 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun performInAppTranslation() {
+        val sourceText = etSourceText.text.toString().trim()
+        if (sourceText.isNotBlank()) {
+            val sourceLangCode = supportedLanguages[spinnerSourceLang.selectedItemPosition].code
+            val targetLangCode = supportedLanguages[spinnerTargetLang.selectedItemPosition].code
+            tvTargetText.text = "Translating..."
+            TranslationApiClient.translate(sourceText, sourceLangCode, targetLangCode) { translatedText ->
+                runOnUiThread {
+                    if (translatedText != null) {
+                        tvTargetText.text = translatedText
+                    } else {
+                        tvTargetText.text = getString(R.string.translation_failed)
+                        Toast.makeText(this, getString(R.string.translation_failed), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        } else {
+            Toast.makeText(this, getString(R.string.enter_text_to_translate), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // --- Permission and Feature Control Logic ---
+
+    private fun requestOverlayPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+            settingsLauncher.launch(intent)
+        }
+    }
+
+    private fun requestAccessibilityPermission() {
+        if (!isAccessibilityServiceSystemEnabled()) {
+            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            Toast.makeText(this, "Please find and enable '${getString(R.string.accessibility_service_label)}'", Toast.LENGTH_LONG).show()
+            settingsLauncher.launch(intent)
+        }
+    }
+
+    private fun toggleSelectToTranslateFeature() {
+        if (!isAccessibilityServiceSystemEnabled() || !Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, getString(R.string.select_to_translate_permissions_needed), Toast.LENGTH_LONG).show()
+            return
+        }
+        val serviceIntent = Intent(this, MyTextSelectionService::class.java)
+        if (MyTextSelectionService.isFeatureActive) {
+            serviceIntent.action = MyTextSelectionService.ACTION_STOP_FEATURE
+        } else {
+            serviceIntent.action = MyTextSelectionService.ACTION_START_FEATURE
+            val minimizeIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(minimizeIntent)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && serviceIntent.action == MyTextSelectionService.ACTION_START_FEATURE) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+    }
+
     private fun isAccessibilityServiceSystemEnabled(): Boolean {
         val serviceComponent = ComponentName(this, MyTextSelectionService::class.java)
         val enabledServicesSetting = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
@@ -284,9 +296,6 @@ class MainActivity : AppCompatActivity() {
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.POST_NOTIFICATIONS)) {
-                    Toast.makeText(this, "Notification permission is needed for service status.", Toast.LENGTH_LONG).show()
-                }
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST)
             }
         }
@@ -300,6 +309,15 @@ class MainActivity : AppCompatActivity() {
             } else {
                 Toast.makeText(this, getString(R.string.notification_permission_denied), Toast.LENGTH_LONG).show()
             }
+        }
+    }
+
+    private fun requestScreenCapturePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager?
+            mediaProjectionManager?.let {
+                screenCaptureLauncher.launch(it.createScreenCaptureIntent())
+            } ?: Log.e(TAG, "MediaProjectionManager not available.")
         }
     }
 }

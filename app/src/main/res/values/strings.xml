@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">SpentTranslator</string>
     <string name="accessibility_service_label">SpentTranslator Service</string>
-    <string name="accessibility_service_description">Allows SpentTranslator to read selected text and display translations.</string>
+    <string name="accessibility_service_description">Allows app to read selected text and display translations.</string>
 
     <string name="enable_accessibility_service">Enable Accessibility Service</string>
     <string name="accessibility_service_enabled_text">Accessibility (System Enabled)</string>
@@ -24,8 +24,6 @@
     <string name="source_text_hint">Enter text to translate</string>
     <string name="translate_button_text">Translate</string>
     <string name="translated_text_label">Translation:</string>
-    <string name="language_from">From:</string>
-    <string name="language_to">To:</string>
     <string name="target_text_hint">Translated text will appear here</string>
     <string name="translation_failed">Translation failed</string>
     <string name="enter_text_to_translate">Please enter text to translate</string>
@@ -33,4 +31,7 @@
     <string name="notification_permission_denied">Notification permission needed for service status updates.</string>
     <string name="accessibility_settings_error">Could not open Accessibility Settings.</string>
     <string name="overlay_settings_error">Could not open Overlay Permission Settings.</string>
+
+    <string name="language_from">From:</string>
+    <string name="language_to">To:</string>
 </resources>

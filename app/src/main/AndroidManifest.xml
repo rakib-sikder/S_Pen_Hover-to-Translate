@@ -51,6 +51,18 @@
         <service
                 android:name=".services.InstructionTooltipService"
                 android:exported="false" />
+        <service
+                android:name=".services.HoverTranslateService"
+                android:exported="false" />
+
+        <service
+                android:name=".services.InstructionTooltipService"
+                android:exported="false" />
+
+        <service
+                android:name=".services.FloatingControlService"
+                android:exported="false" />
+
 
     </application>
 </manifest>

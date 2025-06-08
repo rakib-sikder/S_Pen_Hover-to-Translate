@@ -45,6 +45,7 @@ dependencies {
 
     // ML Kit On-device Translation
     implementation("com.google.mlkit:translate:17.0.2")
+    implementation("com.google.mlkit:language-id:17.0.5")
 
     // ML Kit Text Recognition (for OCR)
     implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.0")

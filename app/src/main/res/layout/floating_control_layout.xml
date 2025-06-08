@@ -1,6 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent">
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        android:id="@+id/floating_widget_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/floating_widget_background"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:elevation="8dp">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <ImageView
+            android:id="@+id/drag_handle"
+            android:layout_width="24dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_drag_handle"
+            android:scaleType="center"
+            android:contentDescription="Drag to move" />
+
+    <Spinner
+            android:id="@+id/spinner_source_lang_widget"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginStart="4dp"/>
+
+    <ImageView
+            android:id="@+id/swap_languages_button"
+            android:layout_width="24dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_swap"
+            android:scaleType="center"
+            android:contentDescription="Swap languages"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:padding="4dp"/>
+
+    <Spinner
+            android:id="@+id/spinner_target_lang_widget"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"/>
+
+    <ImageView
+            android:id="@+id/close_widget_button"
+            android:layout_width="24dp"
+            android:layout_height="48dp"
+            android:src="@drawable/ic_close"
+            android:scaleType="center"
+            android:contentDescription="Close widget"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:padding="4dp"/>
+
+</LinearLayout>

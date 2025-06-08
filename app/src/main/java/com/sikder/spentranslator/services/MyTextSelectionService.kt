@@ -3,16 +3,34 @@ package com.sikder.spentranslator.services
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.PixelFormat
+import android.graphics.Rect
+import android.hardware.display.DisplayManager
+import android.hardware.display.VirtualDisplay
+import android.media.ImageReader
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.core.app.NotificationCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.mlkit.nl.translate.TranslateLanguage
+import com.sikder.spentranslator.MainActivity
+import com.sikder.spentranslator.R
 import com.sikder.spentranslator.TranslationApiClient
+import com.sikder.spentranslator.utils.OcrHelper
+import java.util.concurrent.Executors
 
 class MyTextSelectionService : AccessibilityService() {
 
@@ -20,6 +38,14 @@ class MyTextSelectionService : AccessibilityService() {
     private var lastSelectedText: CharSequence? = null
     private var lastProcessedTime: Long = 0
     private val DEBOUNCE_THRESHOLD = 500L
+    private val mainThreadHandler = Handler(Looper.getMainLooper())
+    private val backgroundExecutor = Executors.newSingleThreadExecutor()
+
+    private var mediaProjection: MediaProjection? = null
+    private var virtualDisplay: VirtualDisplay? = null
+    private var imageReader: ImageReader? = null
+    private val NOTIFICATION_CHANNEL_ID = "SpentTranslatorChannel"
+    private val NOTIFICATION_ID = 1
 
     companion object {
         const val ACTION_START_FEATURE = "com.sikder.spentranslator.ACTION_START_FEATURE"

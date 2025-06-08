@@ -5,8 +5,7 @@
         android:orientation="horizontal"
         android:background="#E6424242"
         android:padding="10dp"
-        android:elevation="6dp"
-        android:layout_margin="8dp">
+        android:elevation="6dp">
 
     <TextView
             android:id="@+id/tooltip_text"

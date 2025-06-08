@@ -1,116 +1,126 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
         xmlns:tools="http://schemas.android.com/tools"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:padding="16dp"
         tools:context=".MainActivity">
 
-    <TextView
+    <LinearLayout
+            android:id="@+id/setupView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/in_app_translator_title"
-            android:textSize="20sp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="8dp"/>
+            android:orientation="vertical"
+            android:gravity="center"
+            android:visibility="gone"
+            tools:visibility="visible"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
 
-    <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="8dp">
+        <ProgressBar
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"/>
+
         <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/language_from"/>
-        <Spinner
-                android:id="@+id/spinnerSourceLang"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:layout_marginEnd="8dp"/>
-        <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/language_to"/>
-        <Spinner
-                android:id="@+id/spinnerTargetLang"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"/>
+                android:text="Waiting for permissions...\nPlease follow system dialogs."
+                android:textAlignment="center"
+                android:textSize="16sp"/>
+
     </LinearLayout>
 
-    <EditText
-            android:id="@+id/etSourceText"
+    <LinearLayout
+            android:id="@+id/mainContentView"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="@string/source_text_hint"
-            android:inputType="textMultiLine"
-            android:minLines="3"
-            android:gravity="top"
-            android:layout_marginBottom="8dp"/>
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone"
+            tools:visibility="gone">
 
-    <Button
-            android:id="@+id/btnTranslateInApp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:text="@string/translate_button_text"
-            android:layout_marginBottom="16dp"/>
+        <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/in_app_translator_title"
+                android:textSize="20sp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="8dp"/>
 
-    <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/translated_text_label"
-            android:textStyle="bold"
-            android:layout_marginBottom="4dp"/>
+        <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+            <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/language_from"/>
+            <Spinner
+                    android:id="@+id/spinnerSourceLang"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp"/>
+            <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/language_to"/>
+            <Spinner
+                    android:id="@+id/spinnerTargetLang"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"/>
+        </LinearLayout>
 
-    <TextView
-            android:id="@+id/tvTargetText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="@string/target_text_hint"
-            android:minLines="3"
-            android:background="#EEEEEE"
-            android:padding="8dp"
-            android:layout_marginBottom="24dp"/>
+        <EditText
+                android:id="@+id/etSourceText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/source_text_hint"
+                android:inputType="textMultiLine"
+                android:minLines="3"
+                android:gravity="top"
+                android:layout_marginBottom="8dp"
+                android:importantForAutofill="no" />
 
-    <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="?android:attr/listDivider"
-            android:layout_marginBottom="24dp"/>
+        <Button
+                android:id="@+id/btnTranslateInApp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:text="@string/translate_button_text"
+                android:layout_marginBottom="16dp"/>
 
-    <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="SpentTranslator Setup"
-            android:textSize="18sp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="16dp"/>
+        <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/translated_text_label"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"/>
 
-    <Button
-            android:id="@+id/btnEnableOverlay"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/enable_overlay_permission"
-            android:layout_marginBottom="8dp"/>
+        <TextView
+                android:id="@+id/tvTargetText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/target_text_hint"
+                android:minLines="3"
+                android:background="#EEEEEE"
+                android:padding="8dp"
+                android:layout_marginBottom="24dp"/>
 
-    <Button
-            android:id="@+id/btnEnableAccessibility"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/enable_accessibility_service"
-            android:layout_marginBottom="16dp"/>
+        <Button
+                android:id="@+id/btnToggleSelectToTranslate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/start_select_to_translate" />
 
-    <Button
-            android:id="@+id/btnToggleSelectToTranslate"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/start_select_to_translate" />
+    </LinearLayout>
 
-</LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -12,105 +12,90 @@ import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.TextView
 import android.widget.Button
-import androidx.annotation.RequiresApi
-import com.sikder.spentranslator.R // Make sure R is imported correctly
+import android.widget.TextView
+import com.sikder.spentranslator.R
 
 class HoverTranslateService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var floatingView: View? = null
     private val TAG = "HoverTranslateService"
-    private val HIDE_DELAY_MS = 5000L // Hide after 5 seconds
+    private val HIDE_DELAY_MS = 5000L
     private val handler = Handler(Looper.getMainLooper())
-    private var currentText: String? = null
-
 
     companion object {
         const val EXTRA_TEXT_TO_SHOW = "extra_text_to_show"
     }
 
-    override fun onBind(intent: Intent?): IBinder? {
-        return null // We are not using binding
-    }
-
     override fun onCreate() {
         super.onCreate()
-        // ADD THIS LOG
-        Log.d(TAG, "onCreate called")
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // ADD THIS LOG AT THE VERY BEGINNING
-        Log.d(TAG, "onStartCommand called. Intent: $intent, Flags: $flags, StartId: $startId")
-
         val textToShow = intent?.getStringExtra(EXTRA_TEXT_TO_SHOW)
-        Log.d(TAG, "Text received from intent: \"$textToShow\"")
-
         if (textToShow.isNullOrBlank()) {
-            Log.w(TAG, "No text to show, stopping service or hiding view.")
             hideTooltipAndStop()
             return START_NOT_STICKY
         }
-
-        currentText = textToShow
-        Log.i(TAG, "Calling showOrUpdateTooltip with text: \"$currentText\"")
-        showOrUpdateTooltip(currentText!!)
-        scheduleHideTooltip()
+        showOrUpdateTooltip(textToShow)
         return START_STICKY
     }
-    @RequiresApi(Build.VERSION_CODES.S)
+
     private fun showOrUpdateTooltip(text: String) {
-        Log.d(TAG, "showOrUpdateTooltip called with text: \"$text\"")
         if (floatingView == null) {
-            Log.d(TAG, "floatingView is null, creating new view.")
-            // ... existing inflater and params code ...
+            floatingView = LayoutInflater.from(this).inflate(R.layout.tooltip_layout, null)
+            val layoutParamsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+                layoutParamsType,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            )
+            params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            params.y = 100
             try {
-                Log.d(TAG, "Attempting to addView to windowManager.")
-                windowManager.addView(floatingView, params as ViewGroup.LayoutParams?)
-                Log.i(TAG, "View added to windowManager successfully.")
+                windowManager.addView(floatingView, params)
             } catch (e: Exception) {
                 Log.e(TAG, "Error adding view to window manager", e)
+                floatingView = null
                 return
             }
-        } else {
-            Log.d(TAG, "floatingView already exists, updating text.")
         }
-        // ... existing code to update text and close button ...
-    }
-
-
-    private fun scheduleHideTooltip() {
-        handler.removeCallbacksAndMessages(null) // Remove previous callbacks
-        handler.postDelayed({
+        floatingView?.findViewById<TextView>(R.id.tooltip_text)?.text = text
+        floatingView?.findViewById<Button>(R.id.tooltip_close_button)?.setOnClickListener {
             hideTooltipAndStop()
-        }, HIDE_DELAY_MS)
+        }
+        // Reschedule hide timer every time new text is shown
+        handler.removeCallbacksAndMessages(null)
+        handler.postDelayed({ hideTooltipAndStop() }, HIDE_DELAY_MS)
     }
 
     private fun hideTooltipAndStop() {
         floatingView?.let {
-            try {
-                windowManager.removeView(it)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error removing view from window manager", e)
+            if (it.windowToken != null) {
+                try {
+                    windowManager.removeView(it)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing view", e)
+                }
             }
             floatingView = null
         }
-        // Optionally stop the service if it's no longer needed
-        // stopSelf() // Consider if you want the service to stop completely or just hide the view
-        Log.i(TAG, "Tooltip hidden.")
+        // stopSelf() // Don't stop the service, just hide the view.
+        // The service can be reused for the next translation.
+        // It will be stopped by the system if idle for a long time.
     }
 
-
+    override fun onBind(intent: Intent?): IBinder? = null
     override fun onDestroy() {
         super.onDestroy()
-        hideTooltipAndStop() // Ensure view is removed when service is destroyed
-        handler.removeCallbacksAndMessages(null)
-        Log.i(TAG, "HoverTranslateService Destroyed")
+        hideTooltipAndStop() // Ensure view is removed
     }
 }

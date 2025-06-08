@@ -1,12 +1,11 @@
 plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
 }
 
 android {
     namespace = "com.sikder.spentranslator"
-    compileSdk = 34
+    compileSdk = 34 // Must be 34 or higher for getSelectedText() to work
 
     defaultConfig {
         applicationId = "com.sikder.spentranslator"
@@ -16,10 +15,6 @@ android {
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    buildFeatures {
-        compose = true
-    }
-
 
     buildTypes {
         release {
@@ -40,24 +35,13 @@ android {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
-    implementation(composeBom)
-    androidTestImplementation(composeBom) // For UI tests
-
-    // Core Compose Dependencies
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3") // For Material Design 3
-
-    // Integration with Activities
-    implementation("androidx.activity:activity-compose:1.9.0")
     // Core Android & UI
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
+    implementation("androidx.activity:activity-ktx:1.9.0")
 
     // ML Kit On-device Translation
     implementation("com.google.mlkit:translate:17.0.2")

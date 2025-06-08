@@ -21,6 +21,7 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -37,8 +38,10 @@ class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
 
     // --- UI Views ---
-    private lateinit var btnEnableAccessibility: Button
-    private lateinit var btnEnableOverlay: Button
+    // We will now show/hide the permission setup view
+    private lateinit var setupView: LinearLayout
+    private lateinit var mainContentView: LinearLayout
+
     private lateinit var btnToggleSelectToTranslate: Button
     private lateinit var etSourceText: EditText
     private lateinit var btnTranslateInApp: Button
@@ -63,100 +66,67 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val ACTION_UPDATE_UI = "com.sikder.spentranslator.ACTION_UPDATE_UI"
-        const val ACTION_REQUEST_SCREEN_CAPTURE_FROM_SERVICE = "com.sikder.spentranslator.REQUEST_SCREEN_CAPTURE"
+        const val ACTION_REQUEST_SCREEN_CAPTURE = "com.sikder.spentranslator.ACTION_REQUEST_SCREEN_CAPTURE"
         private const val NOTIFICATION_PERMISSION_REQUEST = 400
     }
-
-    // --- ActivityResultLaunchers (Modern way to handle results from other activities) ---
-
-    private val settingsLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            Log.d(TAG, "Returned from a settings screen, updating button states.")
-            updateButtonStates()
-        }
-
-    private val screenCaptureLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-                Log.i(TAG, "Screen capture permission GRANTED by user.")
-                // Store the result data in the service's static variables so it can be used for OCR
-                MyTextSelectionService.mediaProjectionResultCode = result.resultCode
-                MyTextSelectionService.mediaProjectionIntent = result.data
-                Toast.makeText(this, "Screen capture enabled. Please select text again to use OCR.", Toast.LENGTH_LONG).show()
-            } else {
-                Log.w(TAG, "Screen capture permission DENIED by user.")
-                Toast.makeText(this, "Screen capture is needed for OCR on some apps.", Toast.LENGTH_SHORT).show()
-                MyTextSelectionService.mediaProjectionResultCode = Activity.RESULT_CANCELED
-                MyTextSelectionService.mediaProjectionIntent = null
-            }
-        }
-
-    // --- BroadcastReceivers ---
 
     private val uiUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_UPDATE_UI) {
-                Log.d(TAG, "Received UI update broadcast from service.")
-                updateButtonStates()
+                Log.d(TAG, "Received UI update broadcast.")
+                updateUiState()
             }
         }
     }
 
-    private val screenCaptureRequestReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == MyTextSelectionService.ACTION_REQUEST_SCREEN_CAPTURE) {
-                Log.i(TAG, "Received request from service for screen capture permission.")
-                requestScreenCapturePermission()
-            }
+    // --- ActivityResultLaunchers ---
+    private val settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        Log.d(TAG, "Returned from a settings screen.")
+        // onResume will handle the UI update
+    }
+    private val screenCaptureLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            Log.i(TAG, "Screen capture permission GRANTED by user.")
+            MyTextSelectionService.mediaProjectionResultCode = result.resultCode
+            MyTextSelectionService.mediaProjectionIntent = result.data
+            Toast.makeText(this, "Screen capture enabled. Please select text again to use OCR.", Toast.LENGTH_LONG).show()
+        } else {
+            Log.w(TAG, "Screen capture permission DENIED by user.")
+            Toast.makeText(this, "Screen capture is needed for OCR on some apps.", Toast.LENGTH_SHORT).show()
         }
     }
 
 
     // --- Activity Lifecycle ---
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         sharedPreferences = getSharedPreferences("SpentTranslatorPrefs", Context.MODE_PRIVATE)
-
         initializeViews()
         setupLanguageSpinners()
         setupClickListeners()
-
         requestNotificationPermission()
 
-        // Register receivers
         LocalBroadcastManager.getInstance(this).registerReceiver(uiUpdateReceiver, IntentFilter(ACTION_UPDATE_UI))
-        // This receiver listens for requests from the service to show the screen capture permission dialog
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(screenCaptureRequestReceiver, IntentFilter(MyTextSelectionService.ACTION_REQUEST_SCREEN_CAPTURE), RECEIVER_NOT_EXPORTED)
-        } else {
-            LocalBroadcastManager.getInstance(this).registerReceiver(screenCaptureRequestReceiver, IntentFilter(MyTextSelectionService.ACTION_REQUEST_SCREEN_CAPTURE))
-        }
     }
 
     override fun onResume() {
         super.onResume()
-        Log.d(TAG, "onResume: Updating button states.")
-        updateButtonStates()
+        Log.d(TAG, "onResume: Checking permissions and updating UI.")
+        checkPermissionsAndShowUI()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(uiUpdateReceiver)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            unregisterReceiver(screenCaptureRequestReceiver)
-        } else {
-            LocalBroadcastManager.getInstance(this).unregisterReceiver(screenCaptureRequestReceiver)
-        }
     }
 
     // --- UI Setup and Logic ---
 
     private fun initializeViews() {
-        btnEnableAccessibility = findViewById(R.id.btnEnableAccessibility)
-        btnEnableOverlay = findViewById(R.id.btnEnableOverlay)
+        setupView = findViewById(R.id.setupView)
+        mainContentView = findViewById(R.id.mainContentView)
         btnToggleSelectToTranslate = findViewById(R.id.btnToggleSelectToTranslate)
         etSourceText = findViewById(R.id.etSourceText)
         btnTranslateInApp = findViewById(R.id.btnTranslateInApp)
@@ -192,7 +162,6 @@ class MainActivity : AppCompatActivity() {
     private fun saveLanguagePreferences() {
         val sourceLangCode = supportedLanguages[spinnerSourceLang.selectedItemPosition].code
         val targetLangCode = supportedLanguages[spinnerTargetLang.selectedItemPosition].code
-        Log.d(TAG, "Saving language preferences: Source=$sourceLangCode, Target=$targetLangCode")
         sharedPreferences.edit()
             .putString("source_lang_code", sourceLangCode)
             .putString("target_lang_code", targetLangCode)
@@ -201,28 +170,35 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupClickListeners() {
         btnTranslateInApp.setOnClickListener { performInAppTranslation() }
-        btnEnableAccessibility.setOnClickListener { requestAccessibilityPermission() }
-        btnEnableOverlay.setOnClickListener { requestOverlayPermission() }
         btnToggleSelectToTranslate.setOnClickListener { toggleSelectToTranslateFeature() }
     }
 
-    private fun updateButtonStates() {
-        val overlayEnabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
-        val accessibilityEnabled = isAccessibilityServiceSystemEnabled()
+    // --- Permission and Feature Control Logic ---
 
-        btnEnableOverlay.isEnabled = !overlayEnabled
-        btnEnableOverlay.text = if (overlayEnabled) getString(R.string.overlay_permission_granted_text) else getString(R.string.enable_overlay_permission)
+    private fun checkPermissionsAndShowUI() {
+        val hasOverlay = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+        val hasAccessibility = isAccessibilityServiceSystemEnabled()
 
-        btnEnableAccessibility.isEnabled = !accessibilityEnabled
-        btnEnableAccessibility.text = if (accessibilityEnabled) getString(R.string.accessibility_service_enabled_text) else getString(R.string.enable_accessibility_service)
-
-        val canToggleFeature = overlayEnabled && accessibilityEnabled
-        btnToggleSelectToTranslate.isEnabled = canToggleFeature
-        if (!canToggleFeature) {
-            btnToggleSelectToTranslate.text = getString(R.string.select_to_translate_permissions_needed)
+        if (hasOverlay && hasAccessibility) {
+            // All permissions granted, show the main UI
+            mainContentView.visibility = View.VISIBLE
+            setupView.visibility = View.GONE
+            updateUiState()
         } else {
-            btnToggleSelectToTranslate.text = if (MyTextSelectionService.isFeatureActive) getString(R.string.stop_select_to_translate) else getString(R.string.start_select_to_translate)
+            // Permissions are missing, hide main UI and guide user
+            mainContentView.visibility = View.GONE
+            setupView.visibility = View.VISIBLE
+            // Automatically launch the next required permission screen
+            if (!hasOverlay) {
+                requestOverlayPermission()
+            } else if (!hasAccessibility) {
+                requestAccessibilityPermission()
+            }
         }
+    }
+
+    private fun updateUiState() {
+        btnToggleSelectToTranslate.text = if (MyTextSelectionService.isFeatureActive) getString(R.string.stop_select_to_translate) else getString(R.string.start_select_to_translate)
     }
 
     private fun performInAppTranslation() {
@@ -237,7 +213,6 @@ class MainActivity : AppCompatActivity() {
                         tvTargetText.text = translatedText
                     } else {
                         tvTargetText.text = getString(R.string.translation_failed)
-                        Toast.makeText(this, getString(R.string.translation_failed), Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -246,10 +221,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // --- Permission and Feature Control Logic ---
-
     private fun requestOverlayPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Please grant Overlay Permission", Toast.LENGTH_LONG).show()
             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
             settingsLauncher.launch(intent)
         }
@@ -257,17 +231,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun requestAccessibilityPermission() {
         if (!isAccessibilityServiceSystemEnabled()) {
+            Toast.makeText(this, "Please enable the '${getString(R.string.accessibility_service_label)}' in Settings", Toast.LENGTH_LONG).show()
             val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            Toast.makeText(this, "Please find and enable '${getString(R.string.accessibility_service_label)}'", Toast.LENGTH_LONG).show()
             settingsLauncher.launch(intent)
         }
     }
 
     private fun toggleSelectToTranslateFeature() {
-        if (!isAccessibilityServiceSystemEnabled() || !Settings.canDrawOverlays(this)) {
-            Toast.makeText(this, getString(R.string.select_to_translate_permissions_needed), Toast.LENGTH_LONG).show()
-            return
-        }
         val serviceIntent = Intent(this, MyTextSelectionService::class.java)
         if (MyTextSelectionService.isFeatureActive) {
             serviceIntent.action = MyTextSelectionService.ACTION_STOP_FEATURE
@@ -304,20 +274,9 @@ class MainActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == NOTIFICATION_PERMISSION_REQUEST) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, getString(R.string.notification_permission_granted), Toast.LENGTH_SHORT).show()
-            } else {
+            if (!(grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
                 Toast.makeText(this, getString(R.string.notification_permission_denied), Toast.LENGTH_LONG).show()
             }
-        }
-    }
-
-    private fun requestScreenCapturePermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager?
-            mediaProjectionManager?.let {
-                screenCaptureLauncher.launch(it.createScreenCaptureIntent())
-            } ?: Log.e(TAG, "MediaProjectionManager not available.")
         }
     }
 }

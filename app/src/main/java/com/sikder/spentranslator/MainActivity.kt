@@ -31,6 +31,9 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.mlkit.nl.translate.TranslateLanguage
+import com.sikder.spentranslator.services.FloatingControlService
+import com.sikder.spentranslator.services.HoverTranslateService
+import com.sikder.spentranslator.services.InstructionTooltipService
 import com.sikder.spentranslator.services.MyTextSelectionService
 
 class MainActivity : AppCompatActivity() {
@@ -117,9 +120,19 @@ class MainActivity : AppCompatActivity() {
         checkPermissionsAndShowUI()
     }
 
+    // Inside MainActivity.kt
+
     override fun onDestroy() {
         super.onDestroy()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(uiUpdateReceiver)
+
+        // *** ADD THIS CODE TO FIX THE ANR ***
+        // Explicitly stop all running services to ensure their views are removed correctly.
+        Log.d(TAG, "MainActivity is being destroyed. Stopping all services.")
+        stopService(Intent(this, MyTextSelectionService::class.java))
+        stopService(Intent(this, FloatingControlService::class.java))
+        stopService(Intent(this, HoverTranslateService::class.java))
+        stopService(Intent(this, InstructionTooltipService::class.java))
     }
 
     // --- UI Setup and Logic ---

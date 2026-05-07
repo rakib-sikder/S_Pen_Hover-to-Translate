@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-        android:accessibilityEventTypes="typeViewTextSelectionChanged"
-        android:canRetrieveWindowContent="true"
-        android:accessibilityFeedbackType="feedbackGeneric"
-        android:description="@string/accessibility_service_description"
-        android:notificationTimeout="100" />
+    android:accessibilityEventTypes="typeWindowContentChanged|typeViewHoverEnter"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/accessibility_description"
+    android:notificationTimeout="100"
+    android:settingsActivity="com.sikder.spentranslator.MainActivity" />

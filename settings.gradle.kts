@@ -19,6 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "SPenTranslator"
+rootProject.name = "S_Pen_Hover-to-Translate"
 include(":app")
- 

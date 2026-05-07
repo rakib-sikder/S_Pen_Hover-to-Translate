@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    res/layout/overlay_tooltip.xml
+
+    The floating tooltip bubble that appears above a highlighted word.
+    Matches the recording: translated text on left, divider, speaker icon, copy icon.
+    The downward-pointing caret arrow is drawn via bg_tooltip shape.
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:minWidth="160dp">
+
+    <!-- Main bubble card -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_tooltip_bubble"
+        android:paddingStart="14dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:gravity="center_vertical"
+        android:elevation="8dp">
+
+        <!-- Text section -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginEnd="10dp">
+
+            <!-- Translated word (large, primary) -->
+            <TextView
+                android:id="@+id/tvTranslated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#FF202124"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:maxWidth="180dp"
+                android:text="Translation" />
+
+            <!-- Original word (small, muted) -->
+            <TextView
+                android:id="@+id/tvOriginal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="#FF888888"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:maxWidth="180dp"
+                android:text="Original" />
+
+        </LinearLayout>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="0.5dp"
+            android:layout_height="32dp"
+            android:background="#FFE0E0E0"
+            android:layout_marginEnd="8dp" />
+
+        <!-- Speak button -->
+        <ImageButton
+            android:id="@+id/btnSpeak"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_icon_btn"
+            android:src="@drawable/ic_volume"
+            android:scaleType="center"
+            android:contentDescription="Listen" />
+
+        <!-- Divider -->
+        <View
+            android:layout_width="0.5dp"
+            android:layout_height="32dp"
+            android:background="#FFE0E0E0"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp" />
+
+        <!-- Copy button -->
+        <ImageButton
+            android:id="@+id/btnCopy"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_icon_btn"
+            android:src="@drawable/ic_copy"
+            android:scaleType="center"
+            android:contentDescription="Copy" />
+
+    </LinearLayout>
+
+    <!-- Downward caret arrow (triangle pointing down toward the word) -->
+    <View
+        android:layout_width="16dp"
+        android:layout_height="8dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/bg_tooltip_caret" />
+
+</LinearLayout>

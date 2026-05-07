@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    res/layout/overlay_top_bar.xml
+
+    Replaces the app's top bar when a word is selected.
+    Shows: [translate icon]  Auto → Bengali  [X close]
+    Matches the recording's top bar transition.
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="52dp"
+    android:orientation="horizontal"
+    android:background="#FFFFFFFF"
+    android:gravity="center_vertical"
+    android:paddingStart="16dp"
+    android:paddingEnd="12dp"
+    android:elevation="4dp">
+
+    <!-- Translate icon -->
+    <ImageView
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:src="@drawable/ic_translate"
+        android:layout_marginEnd="10dp"
+        android:tint="#FF1A73E8"
+        android:contentDescription="Translate" />
+
+    <!-- "Auto" source label -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Auto"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#FF1A73E8" />
+
+    <!-- Arrow -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=" → "
+        android:textSize="14sp"
+        android:textColor="#FF666666"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp" />
+
+    <!-- Target language name (set from code) -->
+    <TextView
+        android:id="@+id/tvTargetLang"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="English"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#FF1A73E8" />
+
+    <!-- Close button -->
+    <ImageButton
+        android:id="@+id/btnClose"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@android:color/transparent"
+        android:src="@drawable/ic_close"
+        android:contentDescription="Close" />
+
+</LinearLayout>

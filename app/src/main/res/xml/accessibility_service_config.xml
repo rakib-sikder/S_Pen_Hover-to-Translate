@@ -10,6 +10,7 @@
         flagReportViewIds|
         flagRetrieveInteractiveWindows"
         android:canRetrieveWindowContent="true"
+        android:canRequestFilterKeyEvents="true"
         android:description="@string/accessibility_description"
         android:notificationTimeout="0"
         android:settingsActivity="com.sikder.spentranslator.MainActivity" />

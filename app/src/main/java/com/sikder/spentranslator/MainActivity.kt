@@ -23,7 +23,7 @@ import com.google.mlkit.nl.translate.TranslatorOptions
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        const val REQUEST_OVERLAY = 1001
+        const val REQUEST_OVERLAY    = 1001
         const val REQUEST_PROJECTION = 1002
 
         val LANGUAGE_NAMES = arrayOf(
@@ -44,6 +44,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStatus: TextView
     private lateinit var spinnerTarget: Spinner
     private lateinit var btnDownloadModel: Button
+    private lateinit var btnClose: Button
 
     private var selectedLangCode = TranslateLanguage.ENGLISH
     private var selectedLangName = "English"
@@ -56,6 +57,7 @@ class MainActivity : AppCompatActivity() {
         tvStatus         = findViewById(R.id.tvStatus)
         spinnerTarget    = findViewById(R.id.spinnerTargetLanguage)
         btnDownloadModel = findViewById(R.id.btnDownloadModel)
+        btnClose         = findViewById(R.id.btnClose)
 
         setupLanguageSpinner()
         setupButtons()
@@ -89,6 +91,7 @@ class MainActivity : AppCompatActivity() {
         btnToggleService.setOnClickListener {
             when {
                 !Settings.canDrawOverlays(this) -> {
+                    // Step 1: request overlay permission
                     startActivityForResult(
                         Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                             Uri.parse("package:$packageName")),
@@ -96,9 +99,16 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
                 !isAccessibilityServiceEnabled() -> {
+                    // Step 2: enable accessibility service
                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 }
+                CaptureService.instance != null -> {
+                    // FIX 3: Service is running — stop it
+                    stopService(Intent(this, CaptureService::class.java))
+                    updateStatus()
+                }
                 else -> {
+                    // All permissions granted and service not running — start it
                     val mgr = getSystemService(MediaProjectionManager::class.java)
                     startActivityForResult(mgr.createScreenCaptureIntent(), REQUEST_PROJECTION)
                 }
@@ -108,11 +118,20 @@ class MainActivity : AppCompatActivity() {
         btnDownloadModel.setOnClickListener {
             downloadTranslationModel()
         }
+
+        btnClose.setOnClickListener {
+            stopService(Intent(this, CaptureService::class.java))
+            // disableSelf() বাদ — permission থাকবে
+            finishAffinity()
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
     }
 
     private fun downloadTranslationModel() {
         btnDownloadModel.isEnabled = false
         btnDownloadModel.text = "Downloading…"
+
+        android.util.Log.d("SPenTranslate", "Download started for: $selectedLangCode")  // ← add
 
         val options = TranslatorOptions.Builder()
             .setSourceLanguage(TranslateLanguage.ENGLISH)
@@ -122,30 +141,35 @@ class MainActivity : AppCompatActivity() {
         Translation.getClient(options)
             .downloadModelIfNeeded(DownloadConditions.Builder().build())
             .addOnSuccessListener {
+                android.util.Log.d("SPenTranslate", "Download SUCCESS")  // ← add
                 btnDownloadModel.text = "Model ready ✓"
                 tvStatus.text = "Translation model downloaded. Ready to use!"
             }
             .addOnFailureListener { e ->
+                android.util.Log.e("SPenTranslate", "Download FAILED: ${e.message}")  // ← add
                 btnDownloadModel.isEnabled = true
                 btnDownloadModel.text = "Download translation model"
                 tvStatus.text = "Download failed: ${e.message}"
             }
     }
-
+    // FIX 4: updateStatus() now reflects whether CaptureService is actually running
     private fun updateStatus() {
-        val hasOverlay      = Settings.canDrawOverlays(this)
+        val hasOverlay       = Settings.canDrawOverlays(this)
         val hasAccessibility = isAccessibilityServiceEnabled()
+        val isRunning        = CaptureService.instance != null
 
         tvStatus.text = when {
-            !hasOverlay      -> "① Grant overlay permission first"
+            !hasOverlay       -> "① Grant overlay permission first"
             !hasAccessibility -> "② Enable S Pen OCR in Accessibility Settings"
-            else             -> "✓ Ready. Hover S Pen and hold still to translate."
+            isRunning         -> "✓ Running. Hover S Pen over text to translate."
+            else              -> "✓ Ready. Tap Start to begin screen capture."
         }
 
         btnToggleService.text = when {
-            !hasOverlay      -> "Grant overlay permission"
+            !hasOverlay       -> "Grant overlay permission"
             !hasAccessibility -> "Enable Accessibility Service"
-            else             -> "Stop service"
+            isRunning         -> "Stop service"
+            else              -> "Start"
         }
     }
 

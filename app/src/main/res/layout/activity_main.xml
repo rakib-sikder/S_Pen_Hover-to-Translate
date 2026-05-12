@@ -76,6 +76,14 @@
             app:layout_constraintEnd_toEndOf="parent"
             android:layout_marginTop="12dp" />
 
+    <Button
+            android:id="@+id/btnClose"
+            android:layout_width="357dp"
+            android:layout_height="49dp"
+            android:text="Close App"
+            tools:layout_editor_absoluteY="387dp"
+            tools:layout_editor_absoluteX="3dp" />
+
     <TextView
             android:id="@+id/tvInstructions"
             android:layout_width="0dp"
@@ -88,6 +96,7 @@
             app:layout_constraintTop_toBottomOf="@id/btnToggleService"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginTop="24dp" />
+            android:layout_marginTop="108dp"
+            app:layout_constraintHorizontal_bias="0.0" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

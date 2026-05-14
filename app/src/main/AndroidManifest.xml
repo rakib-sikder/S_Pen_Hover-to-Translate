@@ -28,7 +28,9 @@
                 android:name=".services.HoverWatchService"
                 android:exported="true"
                 android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-                android:label="@string/app_name">
+                android:label="@string/app_name"
+                android:stopWithTask="true"
+                >
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>

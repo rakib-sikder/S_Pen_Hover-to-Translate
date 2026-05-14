@@ -103,8 +103,8 @@ class MainActivity : AppCompatActivity() {
                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 }
                 CaptureService.instance != null -> {
-                    // FIX 3: Service is running — stop it
                     stopService(Intent(this, CaptureService::class.java))
+                    HoverWatchService.instance?.deactivate()
                     updateStatus()
                 }
                 else -> {
@@ -120,8 +120,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnClose.setOnClickListener {
+            getSharedPreferences("spen_prefs", MODE_PRIVATE)
+                .edit().putBoolean("is_active", false).commit()
             stopService(Intent(this, CaptureService::class.java))
-            // disableSelf() বাদ — permission থাকবে
+            HoverWatchService.instance?.deactivate()
             finishAffinity()
             android.os.Process.killProcess(android.os.Process.myPid())
         }
@@ -195,6 +197,10 @@ class MainActivity : AppCompatActivity() {
                             putExtra(CaptureService.EXTRA_TARGET_LANG_NAME, selectedLangName)
                         }
                     )
+                    HoverWatchService.isActive = true
+                    getSharedPreferences("spen_prefs", MODE_PRIVATE)
+                        .edit().putBoolean("is_active", true).apply()
+                    HoverWatchService.instance?.showModeButtonPublic()
                     updateStatus()
                 }
             }

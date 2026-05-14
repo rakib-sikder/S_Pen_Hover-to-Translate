@@ -1,5 +1,6 @@
 package com.sikder.spentranslator.services
 
+import android.view.PointerIcon
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.ClipData
@@ -41,12 +42,13 @@ class HoverWatchService : AccessibilityService() {
         private const val DWELL_MS      = 900L
         private const val STILL_PX      = 25f
         private const val DISMISS_PX    = 100f
-        private const val EXIT_DEBOUNCE = 350L
+        private const val EXIT_DEBOUNCE = 0L
 
         enum class Mode { WORD, PARAGRAPH }
         var currentMode: Mode = Mode.WORD
 
         var instance: HoverWatchService? = null
+        var isActive: Boolean = false
     }
 
     private var windowManager: WindowManager? = null
@@ -79,8 +81,9 @@ class HoverWatchService : AccessibilityService() {
         Log.d(TAG, "EXIT confirmed — S Pen removed")
         mainHandler.removeCallbacks(dwellRunnable)
         isProcessing = false
-        // S Pen সরে গেছে → overlay সম্পূর্ণ remove করো যাতে touch কাজ করে
+        penOverlay?.hideDot()
         removePenOverlay()
+//        removeModeButton()  // ← এটা add করো
         Log.d(TAG, "✓ Overlay removed — touch restored")
     }
 
@@ -108,6 +111,8 @@ class HoverWatchService : AccessibilityService() {
         init {
             isClickable = false
             isFocusable = false
+            pointerIcon = PointerIcon.getSystemIcon(context, PointerIcon.TYPE_NULL)
+
         }
 
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -140,6 +145,24 @@ class HoverWatchService : AccessibilityService() {
             canvas.drawCircle(cx, cy, dotRadius - 1.5f, strokePaint)
         }
 
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            // S Pen বা finger screen touch করলে সাথে সাথে overlay সরাও
+            // তাহলে touch নিচের app এ চলে যাবে
+            if (event.action == MotionEvent.ACTION_DOWN) {
+//                mainHandler.post { removePenOverlay() }
+                removePenOverlay()
+            }
+            return false
+        }
+        private fun makeOverlayNonTouchable() {
+            val overlay = penOverlay ?: return
+            val wm = windowManager ?: return
+            try {
+                val params = (overlay.layoutParams as WindowManager.LayoutParams)
+                params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                wm.updateViewLayout(overlay, params)
+            } catch (_: Exception) {}
+        }
         // This receives S Pen hover even with FLAG_NOT_TOUCHABLE on the window,
         // because generic motion events travel through the View dispatch chain,
         // not through the input dispatcher's per-window touchable filter.
@@ -147,19 +170,23 @@ class HoverWatchService : AccessibilityService() {
             when (event.action) {
                 MotionEvent.ACTION_HOVER_ENTER,
                 MotionEvent.ACTION_HOVER_MOVE -> {
+                    if (!isActive) return true  // inactive হলে ignore করো
                     val x = event.rawX
                     val y = event.rawY
                     penX = x; penY = y
                     mainHandler.removeCallbacks(exitRunnable)
                     moveDot(x+3, y- 71f)
-                    handlePenMove(x+3, y - 71f)
+                    handlePenMove(x+3, y )
                     Log.v(TAG, "🖊 pen (${x.toInt()},${y.toInt()})")
                     return true
                 }
                 MotionEvent.ACTION_HOVER_EXIT -> {
                     hideDot()
+                    makeOverlayNonTouchable()
+                    mainHandler.removeCallbacks(dwellRunnable)
                     mainHandler.removeCallbacks(exitRunnable)
-                    mainHandler.postDelayed(exitRunnable, EXIT_DEBOUNCE)
+                    isProcessing = false
+                    removePenOverlay()
                     return true
                 }
             }
@@ -189,9 +216,13 @@ class HoverWatchService : AccessibilityService() {
             if (status == TextToSpeech.SUCCESS) tts?.language = Locale.ENGLISH
         }
 
-//        addPenOverlay()  // শুরুতে add করো — accessibility event এ remove/re-add হবে
-        showModeButton()
-        Log.d(TAG, "✓ Connected — target=$targetLanguageName mode=$currentMode")
+        // SharedPreferences থেকে active state load করো
+        // App close করলে false হয়, Start চাপলে true হয়
+        val prefs = getSharedPreferences("spen_prefs", Context.MODE_PRIVATE)
+        isActive = prefs.getBoolean("is_active", false)
+
+        if (isActive) showModeButton()  // active হলেই mode button দেখাও
+        Log.d(TAG, "✓ Connected — active=$isActive target=$targetLanguageName")
     }
 
     override fun onInterrupt() { removeAllOverlays() }
@@ -244,6 +275,18 @@ class HoverWatchService : AccessibilityService() {
         penOverlay = null
     }
 
+    fun deactivate() {
+        isActive = false
+        getSharedPreferences("spen_prefs", Context.MODE_PRIVATE)
+            .edit().putBoolean("is_active", false).apply()
+        mainHandler.post {
+            removePenOverlay()
+            removeAllOverlays()
+            removeModeButton()
+            Log.d(TAG, "🔴 Deactivated — overlays removed")
+        }
+    }
+
     // ── onMotionEvent — not firing on this device ─────────────────
 
     override fun onMotionEvent(event: MotionEvent) { }
@@ -254,10 +297,11 @@ class HoverWatchService : AccessibilityService() {
         event ?: return
         when (event.eventType) {
             AccessibilityEvent.TYPE_VIEW_HOVER_ENTER -> {
+                if (!isActive) return
                 mainHandler.removeCallbacks(exitRunnable)
-                // S Pen screen এ এসেছে → overlay add করো
                 if (penOverlay == null) {
                     addPenOverlay()
+                    showModeButton()  // ← এটা add করো
                     Log.d(TAG, "✓ Overlay added — S Pen detected")
                 }
             }
@@ -295,14 +339,20 @@ class HoverWatchService : AccessibilityService() {
             isProcessing = false
             return
         }
-        capture.captureAndOcr { words ->
-            isProcessing = false
-            if (words.isNullOrEmpty()) { Log.w(TAG, "OCR: 0 words"); return@captureAndOcr }
-            when (currentMode) {
-                Mode.WORD      -> handleWord(words, x, y)
-                Mode.PARAGRAPH -> handleParagraph(words, x, y)
+        // Screenshot এর আগে dot hide করো
+        penOverlay?.hideDot()
+        mainHandler.postDelayed({
+            capture.captureAndOcr { words ->
+                // Screenshot হয়ে গেছে, dot আবার দেখাও
+                penOverlay?.moveDot(dwellX + 3, dwellY - 71f)
+                isProcessing = false
+                if (words.isNullOrEmpty()) { Log.w(TAG, "OCR: 0 words"); return@captureAndOcr }
+                when (currentMode) {
+                    Mode.WORD      -> handleWord(words, x, y)
+                    Mode.PARAGRAPH -> handleParagraph(words, x, y)
+                }
             }
-        }
+        }, 150L) // 80ms অপেক্ষা করো dot সরে যাওয়ার জন্য
     }
 
     // ── WORD mode ─────────────────────────────────────────────────
@@ -520,6 +570,8 @@ class HoverWatchService : AccessibilityService() {
         // Do NOT removePenOverlay() here — tracking must stay alive permanently
     }
 
+    fun showModeButtonPublic() = showModeButton()
+
     // ── Mode button ───────────────────────────────────────────────
 
     private fun showModeButton() {
@@ -527,7 +579,7 @@ class HoverWatchService : AccessibilityService() {
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE ,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.END; x = 0; y = 220 }
 
